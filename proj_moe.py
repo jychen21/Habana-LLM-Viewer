@@ -13,9 +13,11 @@ class Config:
         self.num_bytes = num_bytes
         self.bw = bw
         self.tops = tops
+        self.tops_tpc = 11e12
         self.with_gate = with_gate
         self.num_experts = num_experts
         self.num_layers = num_layers
+        self.hardware_ai = tops / bw
 
 
 def proj_qkvo_proj(model_config):
@@ -37,7 +39,7 @@ def proj_qkvo_proj(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -65,15 +67,35 @@ def proj_attn_qk(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
 
 
 def proj_attn_softmax(model_config):
-    
-    return 0.
+    head_dim = model_config.hidden_size // model_config.num_heads_q
+
+    # memory (in & out)
+    params_in = model_config.batch_size * model_config.num_heads_q * \
+        model_config.seq_len * model_config.seq_len
+    params_out = model_config.batch_size * model_config.num_heads_q * \
+        model_config.seq_len * model_config.seq_len
+
+    params_total = params_in + params_out
+    bytes_total = params_total * model_config.num_bytes
+    runtime_memory = bytes_total / model_config.bw
+
+    # compute (max, x-max, exp(x-max), sum(exp(x-max)), x/sum(exp(x-max)))
+    num_ops = model_config.batch_size * model_config.num_heads_q * \
+        model_config.seq_len * head_dim * model_config.seq_len * 5 # 5 for traversal times
+    runtime_compute = num_ops / model_config.tops_tpc
+
+    # arithmetic intensity (#flops / #bytes)
+    math_ai = num_ops / bytes_total
+
+    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
 
 
 def proj_attn_scorev(model_config):
@@ -98,7 +120,7 @@ def proj_attn_scorev(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -132,7 +154,7 @@ def proj_mlp_gate_or_w3(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -157,7 +179,7 @@ def proj_mlp_up_or_w1(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -182,7 +204,7 @@ def proj_mlp_down_or_w2(model_config):
     runtime_compute = num_ops / model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
-    ai = num_ops / bytes_total
+    math_ai = num_ops / bytes_total
 
     return runtime_memory if runtime_memory > runtime_compute else runtime_compute
     # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -230,6 +252,7 @@ type2bytes = {
     "fp8": 1,
 }
 
+# prefill long sequence
 for bs in [1, 2, 4, 8, 16, 32, 64]:
     model_config = Config(batch_size=bs,
                         seq_len=32000,
@@ -245,4 +268,22 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
                         num_experts=8,
                         num_layers=32)
     runtime_decoder = proj_decoder(model_config)
-    print(f"moe projection bs {bs}: {runtime_decoder:.2f} s")
+    print(f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+
+# decode
+for bs in [1, 2, 4, 8, 16, 32, 64]:
+    model_config = Config(batch_size=bs,
+                        seq_len=128,
+                        hidden_size=4096,
+                        num_heads_q=32,
+                        num_heads_kv=8,
+                        intermediate_size=14336,
+                        is_decoding=True,
+                        num_bytes=type2bytes['fp8'],
+                        bw=device_bw_tops["Gaudi2H_FP8"][0],
+                        tops=device_bw_tops["Gaudi2H_FP8"][1],
+                        with_gate=True,
+                        num_experts=8,
+                        num_layers=32)
+    runtime_decoder = proj_decoder(model_config)
+    print(f"moe projection for decode, bs {bs}: latency: {runtime_decoder:.2f} s")
