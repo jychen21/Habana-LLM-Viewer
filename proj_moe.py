@@ -294,6 +294,7 @@ def proj_single_layer(model_config):
     runtime_single_layer = qkvo_proj["latency"] + runtime_attn + runtime_moe
 
     single_layer_items = {
+        "qkvo": qkvo_proj,
         "attn": attn_items,
         "moe": moe_items,
     }
@@ -321,7 +322,7 @@ type2bytes = {
 
 item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding", "NumExperts",
              "NumLayers", "SeqLength", "DataType", "BatchSize", "Latency (s)", "Throughput (tokens/sec)"]
-layer_analysis_list = ["LayerName", "NumOps", "NumMem", "AI", "Bound"]
+layer_analysis_list = ["LayerName", "NumOps(e9)", "Memory(GB)", "AI", "Bound"]
 
 # prefill long sequence
 print("projection prefill...")
@@ -344,12 +345,14 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
     runtime_decoder, single_layer_items = proj_decoder(model_config)
     prefill_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
                                model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    prefill_layer_analysis.append(
+        [single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2), round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024, 2), round(single_layer_items["qkvo"]["AI"], 2), single_layer_items["qkvo"]["Bound"]])
     for item in single_layer_items["attn"]:
         prefill_layer_analysis.append(
-            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+            [item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), round(item["AI"], 2), item["Bound"]])
     for item in single_layer_items["moe"]:
         prefill_layer_analysis.append(
-            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+            [item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), round(item["AI"], 2), item["Bound"]])
     # print(
     #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
 print(tabulate(prefill_projection))
@@ -377,12 +380,14 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
     runtime_decoder, single_layer_items = proj_decoder(model_config)
     decoding_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
                                 model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    decoding_layer_analysis.append(
+        [single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2), round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024, 2), round(single_layer_items["qkvo"]["AI"], 2), single_layer_items["qkvo"]["Bound"]])
     for item in single_layer_items["attn"]:
         decoding_layer_analysis.append(
-            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+            [item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), round(item["AI"], 2), item["Bound"]])
     for item in single_layer_items["moe"]:
         decoding_layer_analysis.append(
-            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+            [item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), round(item["AI"], 2), item["Bound"]])
     # print(
     #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
 print(tabulate(decoding_projection))
