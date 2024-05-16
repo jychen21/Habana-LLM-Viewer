@@ -253,8 +253,8 @@ type2bytes = {
     "fp8": 1,
 }
 
-item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding",
-             "NumExperts", "NumLayers", "SeqLength", "BatchSize", "Latency (s)", "Throughput (tokens/sec)"]
+item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding", "NumExperts",
+             "NumLayers", "SeqLength", "DataType", "BatchSize", "Latency (s)", "Throughput (tokens/sec)"]
 
 # prefill long sequence
 print("projection prefill...")
@@ -275,7 +275,7 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
                           num_layers=32)
     runtime_decoder = proj_decoder(model_config)
     data_prefill.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
-                        model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+                        model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
     # print(
     #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
 print(tabulate(data_prefill))
@@ -300,7 +300,7 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
                           num_layers=32)
     runtime_decoder = proj_decoder(model_config)
     data_decoding.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
-                          model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+                          model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
     # print(
     #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
 print(tabulate(data_decoding))
