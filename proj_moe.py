@@ -47,20 +47,20 @@ def proj_qkvo_proj(model_config):
     params_out = model_config.batch_size * \
         model_config.seq_len_q * model_config.hidden_size
     params_total = params_in_input + params_in_weight + params_out
-    bytes_total = params_total * model_config.num_bytes * 4  # 4 for qkvo
+    params_total *= 4  # 4 for qkvo
+    bytes_total = params_total * model_config.num_bytes
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, T_Q, H] @ [H, H]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
-        model_config.hidden_size * model_config.intermediate_size * 2 * 4  # 4 for qkvo
-    tops = model_config.tops
-    if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
-    runtime_compute = num_ops / tops
+        model_config.hidden_size * model_config.hidden_size * 2 * 4  # 4 for qkvo
+    tops = model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128)
+    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
-    print(num_ops, bytes_total)
 
     proj_rst = {
         "name": "qkvo_proj",
@@ -71,9 +71,6 @@ def proj_qkvo_proj(model_config):
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
         "bound": "memory" if runtime_memory > runtime_compute else "compute"
     }
-    print("compute tops: ", round(tops/1e12, 2), "memory tops:", round(math_ai * model_config.bw/1e12, 2), "math_ai: ", round(math_ai, 2), \
-          "runtime mem: ", round(runtime_memory * 1000 * 1000, 2), "us runtime compute: ", round(runtime_compute * 1000 * 1000, 2), "us", \
-            "tops_roofline: ", round(proj_rst["tops_roofline"]/1e12, 2))
 
     return proj_rst
 
@@ -93,11 +90,13 @@ def proj_attn_qk(model_config):
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, M, T_Q, D] @ [B, M, D, T_KV]
     num_ops = model_config.batch_size * model_config.num_heads_q * \
         model_config.seq_len_q * head_dim * model_config.seq_len_kv * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
+        tops = tops * (model_config.batch_size / 128) / \
+            math.ceil(model_config.batch_size / 128)  # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -131,7 +130,8 @@ def proj_attn_softmax(model_config):
 
     # compute (max, x-max, exp(x-max), sum(exp(x-max)), x/sum(exp(x-max)))
     num_ops = model_config.batch_size * model_config.num_heads_q * \
-        model_config.seq_len_q * head_dim * model_config.seq_len_kv * 5  # 5 for traversal times
+        model_config.seq_len_q * head_dim * \
+        model_config.seq_len_kv * 5  # 5 for traversal times
     runtime_compute = num_ops / model_config.tops_tpc
 
     # arithmetic intensity (#flops / #bytes)
@@ -165,11 +165,13 @@ def proj_attn_scorev(model_config):
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, M, T_Q, T_KV] @ [B, M, T_KV, D]
     num_ops = model_config.batch_size * model_config.num_heads_q * \
         model_config.seq_len_q * model_config.seq_len_kv * head_dim * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
+        tops = tops * (model_config.batch_size / 128) / \
+            math.ceil(model_config.batch_size / 128)  # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -209,11 +211,12 @@ def proj_mlp_gate_or_w3(model_config):
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, T_Q, H] @ [H, H_Inter]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops
-    tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
-    runtime_compute = num_ops / tops
+    tops = model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -243,11 +246,12 @@ def proj_mlp_up_or_w1(model_config):
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, T_Q, H] @ [H, H_Inter]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops
-    tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
-    runtime_compute = num_ops / tops
+    tops = model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -277,11 +281,12 @@ def proj_mlp_down_or_w2(model_config):
     runtime_memory = bytes_total / model_config.bw
 
     # compute (2 for mul & add)
+    # [B, T_Q, H_Inter] @ [H_Inter, H]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops
-    tops = tops * (model_config.batch_size / 128) / math.ceil(model_config.batch_size / 128)
-    runtime_compute = num_ops / tops
+    tops = model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -348,98 +353,107 @@ layer_analysis_list = ["SeqLength", "DataType", "BatchSize", "LayerName",
 
 
 batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
-dtype = "bf16"
-device = "Gaudi2H_BF16"
-num_bytes = type2bytes[dtype]
-bw = device_bw_tops[device][0]
-tops = device_bw_tops[device][1]
-tops_tpc = device_bw_tops[device][2]
+# batchsize_list = [1, 16, 32, 64, 128]
+dtype_list = ["bf16", "fp8"]
+device_list = ["Gaudi2H_BF16", "Gaudi2H_FP8"]
 
-# prefill long sequence
-print("projection prefill...")
-prefill_projection = [item_list]
-prefill_layer_analysis = dict()
-for bs in batchsize_list:
-    prefill_layer_analysis[bs] = [layer_analysis_list]
-    model_config = Config(batch_size=bs,
-                          seq_len_q=32000,
-                          seq_len_kv=32000,
-                          hidden_size=4096,
-                          num_heads_q=32,
-                          num_heads_kv=8,
-                          intermediate_size=14336,
-                          is_decoding=False,
-                          num_bytes=num_bytes,
-                          bw=bw,
-                          tops=tops,
-                          tops_tpc=tops_tpc,
-                          with_gate=True,
-                          num_experts=8,
-                          num_layers=32)
-    runtime_decoder, single_layer_items = proj_decoder(model_config)
-    prefill_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
-                               model_config.intermediate_size, model_config.is_decoding, model_config.num_experts,
-                               model_config.num_layers, model_config.seq_len_q, dtype, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
-    prefill_layer_analysis[bs].append(
-        [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
-         round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024, 2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2),
-         round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]])
-    for item in single_layer_items["attn"]:
-        prefill_layer_analysis[bs].append(
-            [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), 
-            round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
-    for item in single_layer_items["moe"]:
-        prefill_layer_analysis[bs].append(
-            [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
-            round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
-    # print(
-    #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
-print(tabulate(prefill_projection))
-for bs in batchsize_list:
-    print(tabulate(prefill_layer_analysis[bs]))
-print("done!\n")
+for dtype in dtype_list:
+    for device in device_list:
+        num_bytes = type2bytes[dtype]
+        bw = device_bw_tops[device][0]
+        tops = device_bw_tops[device][1]
+        tops_tpc = device_bw_tops[device][2]
+        # prefill long sequence
+        print("projection prefill...")
+        prefill_projection = [item_list]
+        prefill_layer_analysis = dict()
+        for bs in batchsize_list:
+            prefill_layer_analysis[bs] = [layer_analysis_list]
+            model_config = Config(batch_size=bs,
+                                seq_len_q=32000,
+                                seq_len_kv=32000,
+                                hidden_size=4096,
+                                num_heads_q=32,
+                                num_heads_kv=8,
+                                intermediate_size=14336,
+                                is_decoding=False,
+                                num_bytes=num_bytes,
+                                bw=bw,
+                                tops=tops,
+                                tops_tpc=tops_tpc,
+                                with_gate=True,
+                                num_experts=8,
+                                num_layers=32)
+            runtime_decoder, single_layer_items = proj_decoder(model_config)
+            prefill_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
+                                    model_config.intermediate_size, model_config.is_decoding, model_config.num_experts,
+                                    model_config.num_layers, model_config.seq_len_q, dtype, bs, round(
+                                        runtime_decoder, 2),
+                                    round(1/runtime_decoder * model_config.batch_size, 2)])
+            prefill_layer_analysis[bs].append(
+                [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
+                round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024,
+                    2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2),
+                round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]])
+            for item in single_layer_items["attn"]:
+                prefill_layer_analysis[bs].append(
+                    [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                    round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
+            for item in single_layer_items["moe"]:
+                prefill_layer_analysis[bs].append(
+                    [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                    round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
+            # print(
+            #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+        print(tabulate(prefill_projection))
+        for bs in batchsize_list:
+            print(tabulate(prefill_layer_analysis[bs]))
+        print("done!\n")
 
-# decode
-print("projection decoding...")
-decoding_projection = [item_list]
-decoding_layer_analysis = dict()
-for bs in batchsize_list:
-    decoding_layer_analysis[bs] = [layer_analysis_list]
-    model_config = Config(batch_size=bs,
-                          seq_len_q=1,
-                          seq_len_kv=512,
-                          hidden_size=4096,
-                          num_heads_q=32,
-                          num_heads_kv=8,
-                          intermediate_size=14336,
-                          is_decoding=True,
-                          num_bytes=num_bytes,
-                          bw=bw,
-                          tops=tops,
-                          tops_tpc=tops_tpc,
-                          with_gate=True,
-                          num_experts=8,
-                          num_layers=32)
-    runtime_decoder, single_layer_items = proj_decoder(model_config)
-    decoding_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
-                                model_config.intermediate_size, model_config.is_decoding, model_config.num_experts,
-                                model_config.num_layers, model_config.seq_len_q, dtype, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
-    decoding_layer_analysis[bs].append(
-        [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
-         round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024, 2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2), 
-         round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]]
-    )
-    for item in single_layer_items["attn"]:
-        decoding_layer_analysis[bs].append(
-            [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), 
-             round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
-    for item in single_layer_items["moe"]:
-        decoding_layer_analysis[bs].append(
-            [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2), 
-             round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
-    # print(
-    #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
-# print(tabulate(decoding_projection))
-for bs in batchsize_list:
-    print(tabulate(decoding_layer_analysis[bs]))
-print("done!")
+        # decode
+        print("projection decoding...")
+        decoding_projection = [item_list]
+        decoding_layer_analysis = dict()
+        for bs in batchsize_list:
+            decoding_layer_analysis[bs] = [layer_analysis_list]
+            model_config = Config(batch_size=bs,
+                                seq_len_q=1,
+                                seq_len_kv=512,
+                                hidden_size=4096,
+                                num_heads_q=32,
+                                num_heads_kv=8,
+                                intermediate_size=14336,
+                                is_decoding=True,
+                                num_bytes=num_bytes,
+                                bw=bw,
+                                tops=tops,
+                                tops_tpc=tops_tpc,
+                                with_gate=True,
+                                num_experts=8,
+                                num_layers=16)
+            runtime_decoder, single_layer_items = proj_decoder(model_config)
+            decoding_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
+                                        model_config.intermediate_size, model_config.is_decoding, model_config.num_experts,
+                                        model_config.num_layers, model_config.seq_len_q, dtype, bs, round(
+                                            runtime_decoder, 2),
+                                        round(1/runtime_decoder * model_config.batch_size, 2)])
+            decoding_layer_analysis[bs].append(
+                [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
+                round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024,
+                    2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2),
+                round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]]
+            )
+            for item in single_layer_items["attn"]:
+                decoding_layer_analysis[bs].append(
+                    [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                    round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
+            for item in single_layer_items["moe"]:
+                decoding_layer_analysis[bs].append(
+                    [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                    round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
+            # print(
+            #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+        print(tabulate(decoding_projection))
+        for bs in batchsize_list:
+            print(tabulate(decoding_layer_analysis[bs]))
+        print("done!")
