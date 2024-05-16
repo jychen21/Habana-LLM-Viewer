@@ -95,8 +95,7 @@ def proj_attn_qk(model_config):
         model_config.seq_len_q * head_dim * model_config.seq_len_kv * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128) / \
-            math.ceil(model_config.batch_size / 128)  # 128 for Gaudi2
+        tops = tops * (model_config.batch_size / 128) # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -170,8 +169,7 @@ def proj_attn_scorev(model_config):
         model_config.seq_len_q * model_config.seq_len_kv * head_dim * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128) / \
-            math.ceil(model_config.batch_size / 128)  # 128 for Gaudi2
+        tops = tops * (model_config.batch_size / 128) # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
