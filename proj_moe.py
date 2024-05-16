@@ -2,8 +2,10 @@ from tabulate import tabulate
 
 
 device_bw_tops = {
-    "Gaudi2H_BF16": [2.24e12, 420e12],
-    "Gaudi2H_FP8": [2.24e12, 840e12],
+    "Gaudi2H_FP32": [2.24e12, 114e12, 11e12],
+    "Gaudi2H_FP16": [2.24e12, 420e12, 22e12],
+    "Gaudi2H_BF16": [2.24e12, 420e12, 22e12],
+    "Gaudi2H_FP8": [2.24e12, 840e12, 22e12],
 }
 
 type2bytes = {
@@ -15,7 +17,7 @@ type2bytes = {
 
 class Config:
     def __init__(self, batch_size, seq_len, hidden_size, num_heads_q, num_heads_kv,
-                 intermediate_size, is_decoding, num_bytes, bw, tops, with_gate, num_experts, num_layers):
+                 intermediate_size, is_decoding, num_bytes, bw, tops, tops_tpc, with_gate, num_experts, num_layers):
         self.batch_size = batch_size
         self.seq_len = seq_len
         self.hidden_size = hidden_size
@@ -31,6 +33,7 @@ class Config:
         self.num_experts = num_experts
         self.num_layers = num_layers
         self.hardware_ai = tops / bw
+        self.hardware_ai_attn = tops / bw
 
 
 def proj_qkvo_proj(model_config):
@@ -333,6 +336,7 @@ device = "Gaudi2H_BF16"
 num_bytes = type2bytes[dtype]
 bw = device_bw_tops[device][0]
 tops = device_bw_tops[device][1]
+tops_tpc = device_bw_tops[device][2]
 
 # prefill long sequence
 print("projection prefill...")
@@ -350,6 +354,7 @@ for bs in batchsize_list:
                           num_bytes=num_bytes,
                           bw=bw,
                           tops=tops,
+                          tops_tpc=tops_tpc,
                           with_gate=True,
                           num_experts=8,
                           num_layers=32)
@@ -389,6 +394,7 @@ for bs in batchsize_list:
                           num_bytes=num_bytes,
                           bw=bw,
                           tops=tops,
+                          tops_tpc=tops_tpc,
                           with_gate=True,
                           num_experts=8,
                           num_layers=32)
