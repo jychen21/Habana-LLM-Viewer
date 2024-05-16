@@ -1,3 +1,4 @@
+from tabulate import tabulate
 
 
 class Config:
@@ -88,7 +89,7 @@ def proj_attn_softmax(model_config):
 
     # compute (max, x-max, exp(x-max), sum(exp(x-max)), x/sum(exp(x-max)))
     num_ops = model_config.batch_size * model_config.num_heads_q * \
-        model_config.seq_len * head_dim * model_config.seq_len * 5 # 5 for traversal times
+        model_config.seq_len * head_dim * model_config.seq_len * 5  # 5 for traversal times
     runtime_compute = num_ops / model_config.tops_tpc
 
     # arithmetic intensity (#flops / #bytes)
@@ -252,38 +253,55 @@ type2bytes = {
     "fp8": 1,
 }
 
+item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding",
+             "NumExperts", "NumLayers", "SeqLength", "BatchSize", "Latency (s)", "Throughput (tokens/sec)"]
+
 # prefill long sequence
+print("projection prefill...")
+data_prefill = [item_list]
 for bs in [1, 2, 4, 8, 16, 32, 64]:
     model_config = Config(batch_size=bs,
-                        seq_len=32000,
-                        hidden_size=4096,
-                        num_heads_q=32,
-                        num_heads_kv=8,
-                        intermediate_size=14336,
-                        is_decoding=False,
-                        num_bytes=type2bytes['fp8'],
-                        bw=device_bw_tops["Gaudi2H_FP8"][0],
-                        tops=device_bw_tops["Gaudi2H_FP8"][1],
-                        with_gate=True,
-                        num_experts=8,
-                        num_layers=32)
+                          seq_len=32000,
+                          hidden_size=4096,
+                          num_heads_q=32,
+                          num_heads_kv=8,
+                          intermediate_size=14336,
+                          is_decoding=False,
+                          num_bytes=type2bytes['fp8'],
+                          bw=device_bw_tops["Gaudi2H_FP8"][0],
+                          tops=device_bw_tops["Gaudi2H_FP8"][1],
+                          with_gate=True,
+                          num_experts=8,
+                          num_layers=32)
     runtime_decoder = proj_decoder(model_config)
-    print(f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+    data_prefill.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
+                        model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    # print(
+    #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+print(tabulate(data_prefill))
+print("done!\n")
 
 # decode
+print("projection decoding...")
+data_decoding = [item_list]
 for bs in [1, 2, 4, 8, 16, 32, 64]:
     model_config = Config(batch_size=bs,
-                        seq_len=128,
-                        hidden_size=4096,
-                        num_heads_q=32,
-                        num_heads_kv=8,
-                        intermediate_size=14336,
-                        is_decoding=True,
-                        num_bytes=type2bytes['fp8'],
-                        bw=device_bw_tops["Gaudi2H_FP8"][0],
-                        tops=device_bw_tops["Gaudi2H_FP8"][1],
-                        with_gate=True,
-                        num_experts=8,
-                        num_layers=32)
+                          seq_len=128,
+                          hidden_size=4096,
+                          num_heads_q=32,
+                          num_heads_kv=8,
+                          intermediate_size=14336,
+                          is_decoding=True,
+                          num_bytes=type2bytes['fp8'],
+                          bw=device_bw_tops["Gaudi2H_FP8"][0],
+                          tops=device_bw_tops["Gaudi2H_FP8"][1],
+                          with_gate=True,
+                          num_experts=8,
+                          num_layers=32)
     runtime_decoder = proj_decoder(model_config)
-    print(f"moe projection for decode, bs {bs}: latency: {runtime_decoder:.2f} s")
+    data_decoding.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
+                          model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    # print(
+    #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
+print(tabulate(data_decoding))
+print("done!")
