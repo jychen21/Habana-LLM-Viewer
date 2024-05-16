@@ -42,8 +42,16 @@ def proj_qkvo_proj(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "qkvo_proj",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_attn_qk(model_config):
@@ -70,8 +78,16 @@ def proj_attn_qk(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "q@k_T",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_attn_softmax(model_config):
@@ -95,8 +111,16 @@ def proj_attn_softmax(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "softmax",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_attn_scorev(model_config):
@@ -123,17 +147,25 @@ def proj_attn_scorev(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "score@v",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_attn(model_config):
-    runtime_qk = proj_attn_qk(model_config)
-    runtime_softmax = proj_attn_softmax(model_config)
-    runtime_scorev = proj_attn_scorev(model_config)
-    runtime_attn = runtime_qk + runtime_softmax + runtime_scorev
+    qk = proj_attn_qk(model_config)
+    softmax = proj_attn_softmax(model_config)
+    scorev = proj_attn_scorev(model_config)
+    runtime_attn = qk["latency"] + softmax["latency"] + scorev["latency"]
 
-    return runtime_attn
+    return runtime_attn, (qk, softmax, scorev)
 
 
 def proj_mlp_gate_or_w3(model_config):
@@ -157,8 +189,16 @@ def proj_mlp_gate_or_w3(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "mlp_gate(w3)",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_mlp_up_or_w1(model_config):
@@ -182,8 +222,16 @@ def proj_mlp_up_or_w1(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "mlp_up(w1)",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_mlp_down_or_w2(model_config):
@@ -207,39 +255,57 @@ def proj_mlp_down_or_w2(model_config):
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
 
-    return runtime_memory if runtime_memory > runtime_compute else runtime_compute
-    # return bytes_total, runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    proj_rst = {
+        "name": "mlp_down(w2)",
+        "#ops": num_ops,
+        "#mem": bytes_total,
+        "AI": math_ai,
+        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
+        "Bound": "memory" if runtime_memory > runtime_compute else "compute"
+    }
+
+    return proj_rst
 
 
 def proj_mlp(model_config):
-    runtime_mlp = 0
-    runtime_mlp += proj_mlp_up_or_w1(model_config)
-    runtime_mlp += proj_mlp_down_or_w2(model_config)
+    up = proj_mlp_up_or_w1(model_config)
     if model_config.with_gate:
-        runtime_mlp += proj_mlp_gate_or_w3(model_config)
+        gate = proj_mlp_gate_or_w3(model_config)
+    down = proj_mlp_down_or_w2(model_config)
 
-    return runtime_mlp
+    runtime_mlp = up["latency"] + down["latency"]
+    if model_config.with_gate:
+        runtime_mlp += gate["latency"]
+
+    return runtime_mlp, (up, down, gate if model_config.with_gate else None)
 
 
 def proj_moe(model_config):
-    runtime_moe = proj_mlp(model_config) * model_config.num_experts
+    runtime_mlp, mlp_items = proj_mlp(model_config)
+    runtime_moe = runtime_mlp * model_config.num_experts
 
-    return runtime_moe
+    return runtime_moe, mlp_items
 
 
 def proj_single_layer(model_config):
-    runtime_qkvo = proj_qkvo_proj(model_config)
-    runtime_attn = proj_qkvo_proj(model_config)
-    runtime_moe = proj_moe(model_config)
-    runtime_single_layer = runtime_qkvo + runtime_attn + runtime_moe
+    qkvo_proj = proj_qkvo_proj(model_config)
+    runtime_attn, attn_items = proj_attn(model_config)
+    runtime_moe, moe_items = proj_moe(model_config)
+    runtime_single_layer = qkvo_proj["latency"] + runtime_attn + runtime_moe
 
-    return runtime_single_layer
+    single_layer_items = {
+        "attn": attn_items,
+        "moe": moe_items,
+    }
+
+    return runtime_single_layer, single_layer_items
 
 
 def proj_decoder(model_config):
-    runtime_decoder = proj_single_layer(model_config) * model_config.num_layers
+    runtime_single_layer, single_layer_items = proj_single_layer(model_config)
+    runtime_decoder = runtime_single_layer * model_config.num_layers
 
-    return runtime_decoder
+    return runtime_decoder, single_layer_items
 
 
 device_bw_tops = {
@@ -255,10 +321,12 @@ type2bytes = {
 
 item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding", "NumExperts",
              "NumLayers", "SeqLength", "DataType", "BatchSize", "Latency (s)", "Throughput (tokens/sec)"]
+layer_analysis_list = ["LayerName", "NumOps", "NumMem", "AI", "Bound"]
 
 # prefill long sequence
 print("projection prefill...")
-data_prefill = [item_list]
+prefill_projection = [item_list]
+prefill_layer_analysis = [layer_analysis_list]
 for bs in [1, 2, 4, 8, 16, 32, 64]:
     model_config = Config(batch_size=bs,
                           seq_len=32000,
@@ -273,17 +341,25 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
                           with_gate=True,
                           num_experts=8,
                           num_layers=32)
-    runtime_decoder = proj_decoder(model_config)
-    data_prefill.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
-                        model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    runtime_decoder, single_layer_items = proj_decoder(model_config)
+    prefill_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
+                               model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    for item in single_layer_items["attn"]:
+        prefill_layer_analysis.append(
+            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+    for item in single_layer_items["moe"]:
+        prefill_layer_analysis.append(
+            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
     # print(
     #     f"moe projection for prefill, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
-print(tabulate(data_prefill))
+print(tabulate(prefill_projection))
+print(tabulate(prefill_layer_analysis))
 print("done!\n")
 
 # decode
 print("projection decoding...")
-data_decoding = [item_list]
+decoding_projection = [item_list]
+decoding_layer_analysis = [layer_analysis_list]
 for bs in [1, 2, 4, 8, 16, 32, 64]:
     model_config = Config(batch_size=bs,
                           seq_len=128,
@@ -298,10 +374,17 @@ for bs in [1, 2, 4, 8, 16, 32, 64]:
                           with_gate=True,
                           num_experts=8,
                           num_layers=32)
-    runtime_decoder = proj_decoder(model_config)
-    data_decoding.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
-                          model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    runtime_decoder, single_layer_items = proj_decoder(model_config)
+    decoding_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv, model_config.intermediate_size,
+                                model_config.is_decoding, model_config.num_experts, model_config.num_layers, model_config.seq_len, 'fp8', bs, round(runtime_decoder, 2), round(1/runtime_decoder, 2)])
+    for item in single_layer_items["attn"]:
+        decoding_layer_analysis.append(
+            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
+    for item in single_layer_items["moe"]:
+        decoding_layer_analysis.append(
+            [item["name"], item["#ops"], item["#mem"], round(item["AI"], 2), item["Bound"]])
     # print(
     #     f"moe projection for decoding, bs: {bs}, 1st token latency: {runtime_decoder:.2f} s, 1st token throughput: {1/runtime_decoder} tokens/sec")
-print(tabulate(data_decoding))
+print(tabulate(decoding_projection))
+print(tabulate(decoding_layer_analysis))
 print("done!")
