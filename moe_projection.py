@@ -1,3 +1,5 @@
+# https://arxiv.org/pdf/2402.16363
+
 import math
 from tqdm import tqdm
 from tabulate import tabulate
@@ -400,7 +402,7 @@ if __name__ == "__main__":
         tops = device_bw_tops[device][1]
         tops_tpc = device_bw_tops[device][2]
 
-        # prefill long sequence
+        # prefill
         print(
             f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
         prefill_projection = [item_list]
@@ -415,20 +417,20 @@ if __name__ == "__main__":
                     model_config)
                 prefill_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
                                            model_config.intermediate_size, model_config.is_decoding,
-                                           model_config.num_experts, model_config.num_layers, model_config.seq_len_q, dtype,
+                                           model_config.num_experts, model_config.num_layers, in_out["in"], in_out["out"], dtype,
                                            bs, round(runtime_decoder, 2), round(1/runtime_decoder * model_config.batch_size, 2)])
                 prefill_layer_analysis[bs].append(
-                    [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
+                    [in_out["in"], in_out["out"], dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
                      round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024,
                            2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2),
                      round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]])
                 for item in single_layer_items["attn"]:
                     prefill_layer_analysis[bs].append(
-                        [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                        [in_out["in"], in_out["out"], dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
                          round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
                 for item in single_layer_items["moe"]:
                     prefill_layer_analysis[bs].append(
-                        [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                        [in_out["in"], in_out["out"], dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
                          round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
         print("done!\n")
         # print(tabulate(prefill_projection))
@@ -452,21 +454,21 @@ if __name__ == "__main__":
                     model_config)
                 decoding_projection.append([model_config.hidden_size, model_config.num_heads_q, model_config.num_heads_kv,
                                             model_config.intermediate_size, model_config.is_decoding,
-                                            model_config.num_experts, model_config.num_layers, model_config.seq_len_q, dtype,
+                                            model_config.num_experts, model_config.num_layers, in_out["in"], in_out["out"], dtype,
                                             bs, round(runtime_decoder, 2), round(1/runtime_decoder * model_config.batch_size, 2)])
                 decoding_layer_analysis[bs].append(
-                    [model_config.seq_len_q, dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
+                    [in_out["in"], in_out["out"], dtype, bs, single_layer_items["qkvo"]["name"], round(single_layer_items["qkvo"]["#ops"]/1e9, 2),
                      round(single_layer_items["qkvo"]["#mem"]/1024/1024/1024,
                            2), round(single_layer_items["qkvo"]["tops_roofline"]/1e12, 2),
                      round(single_layer_items["qkvo"]["math_ai"], 2), single_layer_items["qkvo"]["bound"]]
                 )
                 for item in single_layer_items["attn"]:
                     decoding_layer_analysis[bs].append(
-                        [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                        [in_out["in"], in_out["out"], dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
                          round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
                 for item in single_layer_items["moe"]:
                     decoding_layer_analysis[bs].append(
-                        [model_config.seq_len_q, dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
+                        [in_out["in"], in_out["out"], dtype, bs, item["name"], round(item["#ops"]/1e9, 2), round(item["#mem"]/1024/1024/1024, 2),
                          round(item["tops_roofline"]/1e12, 2), round(item["math_ai"], 2), item["bound"]])
         print("done!")
         # print(tabulate(decoding_projection))
