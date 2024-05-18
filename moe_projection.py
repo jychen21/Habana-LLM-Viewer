@@ -3,6 +3,7 @@
 import math
 from tqdm import tqdm
 from tabulate import tabulate
+import matplotlib.pyplot as plt
 
 
 device_bw_tops = {
@@ -10,6 +11,9 @@ device_bw_tops = {
     "Gaudi2H_FP16": [2.24e12, 420e12, 22e12],
     "Gaudi2H_BF16": [2.24e12, 420e12, 22e12],
     "Gaudi2H_FP8": [2.24e12, 840e12, 22e12],
+    "Gaudi2C_FP16": [2.24e12, 287e12, 22e12],
+    "Gaudi2C_BF16": [2.24e12, 287e12, 22e12],
+    "Gaudi2C_FP8": [2.24e12, 574e12, 22e12],
 }
 
 type2bytes = {
@@ -22,8 +26,8 @@ type2bytes = {
 type2devices = {
     "fp32": "Gaudi2H_FP32",
     "fp16": "Gaudi2H_BF16",
-    "bf16": "Gaudi2H_BF16",
-    "fp8": "Gaudi2H_FP8",
+    "bf16": "Gaudi2C_BF16", # "Gaudi2H_BF16",
+    "fp8": "Gaudi2C_FP8", # "Gaudi2H_FP8",
 }
 
 
@@ -66,8 +70,8 @@ def proj_qkvo_proj(model_config):
     # [B, T_Q, H] @ [H, H]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.hidden_size * 2 * 4  # 4 for qkvo
-    tops = model_config.tops * \
-        (model_config.batch_size * model_config.seq_len_q / 128)
+    tops = min(model_config.tops, model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128))
     runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -106,7 +110,7 @@ def proj_attn_qk(model_config):
         model_config.seq_len_q * head_dim * model_config.seq_len_kv * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128)  # 128 for Gaudi2
+        tops = min(tops, tops * (model_config.batch_size / 128))  # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -181,7 +185,7 @@ def proj_attn_scorev(model_config):
         model_config.seq_len_q * model_config.seq_len_kv * head_dim * 2
     tops = model_config.tops
     if model_config.is_decoding:
-        tops = tops * (model_config.batch_size / 128)  # 128 for Gaudi2
+        tops = min(tops, tops * (model_config.batch_size / 128))  # 128 for Gaudi2
     runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -224,8 +228,8 @@ def proj_mlp_gate_or_w3(model_config):
     # [B, T_Q, H] @ [H, H_Inter]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops * \
-        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    tops = min(model_config.tops, model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
     runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -259,8 +263,8 @@ def proj_mlp_up_or_w1(model_config):
     # [B, T_Q, H] @ [H, H_Inter]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops * \
-        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    tops = min(model_config.tops, model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
     runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -294,8 +298,8 @@ def proj_mlp_down_or_w2(model_config):
     # [B, T_Q, H_Inter] @ [H_Inter, H]
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
-    tops = model_config.tops * \
-        (model_config.batch_size * model_config.seq_len_q / 128)  # 128 for Gaudi2
+    tops = min(model_config.tops, model_config.tops * \
+        (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
     runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
@@ -357,10 +361,11 @@ def proj_decoder(model_config):
 
 
 def print_projection(projection_dict):
-    for key, proj in projection_dict.items():
-        print(key.center(150))
-        for data in proj:
-            print(tabulate(data))
+    for key, projection in projection_dict.items():
+        for _, proj in projection.items():
+            print(key.center(150))
+            for data in proj:
+                print(tabulate(data))
 
 
 def print_analysis(analysis_dict, batchsize_list):
@@ -369,6 +374,23 @@ def print_analysis(analysis_dict, batchsize_list):
             for data in analysis:
                 print(key.center(100))
                 print(tabulate(data[bs]))
+
+
+def plot_projection(projection_dict, batchsize_list):
+    plt.figure()
+    for key, projection in projection_dict.items():
+        if key == "decode":
+            for dtype, proj in projection.items():
+                for data in proj:
+                    proj_list = []
+                    for i in range(0, len(batchsize_list)):
+                        print(data[i][-1])
+                        proj_list.append(data[i][-1])
+                    plt.plot(batchsize_list, proj_list, label=dtype)
+    plt.xlabel("batch_size")
+    plt.ylabel("throughput(tokens/sec)")
+    plt.title("performance")
+    plt.legend()
 
 
 item_list = ["HiddenSize", "NumHeadsQ", "NumHeadsKV", "InterSize", "IsDecoding", "NumExperts",
@@ -392,7 +414,7 @@ if __name__ == "__main__":
     in_out_token_list = [{"in": 128, "out": 128}]
     batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
 
-    projection_dict = {"prefill": [], "decode": []}
+    projection_dict = {"prefill": {}, "decode": {}}
     analysis_dict = {"prefill": [], "decode": []}
 
     for dtype in dtype_list:
@@ -405,6 +427,7 @@ if __name__ == "__main__":
         # prefill
         print(
             f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
+        projection_dict["prefill"][dtype] = []
         prefill_projection = [item_list]
         prefill_layer_analysis = dict()
         for in_out in in_out_token_list:
@@ -436,12 +459,13 @@ if __name__ == "__main__":
         # print(tabulate(prefill_projection))
         # for bs in batchsize_list:
         #     print(tabulate(prefill_layer_analysis[bs]))
-        projection_dict["prefill"].append(prefill_projection)
+        projection_dict["prefill"][dtype].append(prefill_projection)
         analysis_dict["prefill"].append(prefill_layer_analysis)
 
         # decode
         print(
             f"projection decoding with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
+        projection_dict["decode"][dtype] = []
         decoding_projection = [item_list]
         decoding_layer_analysis = dict()
         for in_out in in_out_token_list:
@@ -474,8 +498,9 @@ if __name__ == "__main__":
         # print(tabulate(decoding_projection))
         # for bs in batchsize_list:
         #     print(tabulate(decoding_layer_analysis[bs]))
-        projection_dict["decode"].append(decoding_projection)
+        projection_dict["decode"][dtype].append(decoding_projection)
         analysis_dict["decode"].append(decoding_layer_analysis)
 
     print_projection(projection_dict)
     # print_analysis(analysis_dict, batchsize_list)
+    plot_projection(projection_dict, batchsize_list)
