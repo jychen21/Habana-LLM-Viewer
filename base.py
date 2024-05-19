@@ -55,6 +55,8 @@ class Config:
         self.kvcache_bucket = False
         self.hardware_ai = tops / bw
         self.hardware_ai_attn = tops / bw
+        if self.is_decoding:
+            self.hardware_ai_attn /= 128  # 128 for Gaudi2
 
 
 def proj_qkvo_proj(model_config):
@@ -74,20 +76,21 @@ def proj_qkvo_proj(model_config):
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.hidden_size * 2 * 4  # 4 for qkvo
     tops = min(model_config.tops, model_config.tops *
-               (model_config.batch_size * model_config.seq_len_q / 128))
-    runtime_compute = num_ops / tops  # model_config.tops
+               (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops  # model_config.tops
 
     proj_rst = {
         "name": "qkvo_proj",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai else "compute"
     }
 
     return proj_rst
@@ -114,20 +117,22 @@ def proj_attn_qk(model_config):
     tops = model_config.tops
     if model_config.is_decoding:
         # 128 for Gaudi2
+        # 128 for Gaudi2
         tops = min(tops, tops * (model_config.batch_size / 128))
-    runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops
 
     proj_rst = {
         "name": "q@k_T",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai_attn else "compute"
     }
 
     return proj_rst
@@ -163,7 +168,7 @@ def proj_attn_softmax(model_config):
         "math_ai": math_ai,
         "tops_roofline": min(model_config.tops_tpc, math_ai * model_config.bw),
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai_attn else "compute"
     }
 
     return proj_rst
@@ -190,20 +195,22 @@ def proj_attn_scorev(model_config):
     tops = model_config.tops
     if model_config.is_decoding:
         # 128 for Gaudi2
+        # 128 for Gaudi2
         tops = min(tops, tops * (model_config.batch_size / 128))
-    runtime_compute = num_ops / tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops
 
     proj_rst = {
         "name": "score@v",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai else "compute"
     }
 
     return proj_rst
@@ -226,19 +233,20 @@ def proj_mlp_gate_or_w3(model_config):
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
                (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
-    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops
 
     proj_rst = {
         "name": "mlp_gate(w3)",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai else "compute"
     }
 
     return proj_rst
@@ -261,19 +269,20 @@ def proj_mlp_up_or_w1(model_config):
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
                (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
-    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops
 
     proj_rst = {
         "name": "mlp_up(w1)",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai else "compute"
     }
 
     return proj_rst
@@ -296,19 +305,20 @@ def proj_mlp_down_or_w2(model_config):
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
                (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
-    runtime_compute = num_ops / tops  # model_config.tops
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
+    tops = min(tops, math_ai * model_config.bw)
+    runtime_compute = num_ops / tops
 
     proj_rst = {
         "name": "mlp_down(w2)",
         "#ops": num_ops,
         "#mem": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": min(tops, math_ai * model_config.bw),
+        "tops_roofline": tops,
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if runtime_memory > runtime_compute else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai else "compute"
     }
 
     return proj_rst

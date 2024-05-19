@@ -62,13 +62,16 @@ if __name__ == "__main__":
     intermediate_size = 14336
     mlp_with_gate = True
     num_experts = 8
-    num_layers = 32
+    num_layers = 16
 
-    dtype_list = ["bf16", "fp8"]
+    # dtype_list = ["bf16", "fp8"]
+    dtype_list = ["bf16"]
     # in_out_token_list = [{"in": 128, "out": 128}, {"in": 1024, "out": 1024}, {
     #     "in": 1, "out": 2048}, {"in": 32000, "out": 512}]
     in_out_token_list = [{"in": 128, "out": 128}]
-    batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    # batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512]
+    batchsize_list = [1, 4, 16, 24, 28, 32,
+                      48, 56, 60, 64, 96, 112, 128, 256, 512]
 
     projection_dict = {"prefill": {}, "decode": {}}
     analysis_dict = {"prefill": [], "decode": []}
@@ -160,5 +163,5 @@ if __name__ == "__main__":
         analysis_dict["decode"].append(decoding_layer_analysis)
 
     print_projection(projection_dict)
-    # print_analysis(analysis_dict, batchsize_list)
-    plot_projection(projection_dict, batchsize_list)
+    print_analysis(analysis_dict, batchsize_list)
+    # plot_projection(projection_dict, batchsize_list)
