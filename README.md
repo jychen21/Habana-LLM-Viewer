@@ -13,4 +13,4 @@
 
 ## Notes
 1. Currently only with single card, will support multi-card / multi-node.
-2. Only cover Mixtral-8x7B, will cover more
+2. Only cover Mixtral-8x7B, will cover more.
