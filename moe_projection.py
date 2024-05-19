@@ -1,7 +1,7 @@
+from base import *
+from tqdm import tqdm
 import sys
 sys.path.append("../projection")
-from tqdm import tqdm
-from base import *
 
 
 def proj_attn(model_config):

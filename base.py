@@ -29,9 +29,9 @@ type2devices = {
 
 
 item_list = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts",
-                 "Layers", "Input", "Output", "DType", "BS", "Latency(s)", "Throughput(tokens/sec)"]
+             "Layers", "Input", "Output", "DType", "BS", "Latency(s)", "Throughput(tokens/sec)"]
 layer_analysis_list = ["Input", "Output", "DataType", "BatchSize", "LayerName",
-                        "NumOps(e9)", "Memory(GB)", "TopsRF(TFlops)", "AI", "Bound"]
+                       "NumOps(e9)", "Memory(GB)", "TopsRF(TFlops)", "AI", "Bound"]
 
 
 class Config:
@@ -352,3 +352,4 @@ def plot_projection(projection_dict, batchsize_list):
             plt.grid(axis='x')
             plt.legend()
             plt.show()
+            plt.savefig("./figure/decode_projection.png")
