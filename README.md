@@ -9,7 +9,7 @@
 
 ## Example
 ### Mixtral-8x7B
-![Mixtral-8x7B Projection](./figure/decode_projection.png)
+![Mixtral-8x7B Projection](./figure/mixtral_proj_plot.png)
 ![Mixtral-8x7B_projection_table](./figure/mixtral_proj_table.png)
 
 ## Notes

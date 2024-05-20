@@ -161,4 +161,4 @@ if __name__ == "__main__":
 
     print_projection(projection_dict)
     print_analysis(analysis_dict, batchsize_list)
-    # plot_projection(projection_dict, batchsize_list)
+    plot_projection(projection_dict, batchsize_list)
