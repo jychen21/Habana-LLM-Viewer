@@ -1,16 +1,20 @@
 # projection
 
 ## Command
-1. simpily run
+1. simpily run with **moe_projection.py**
     ```sh
     python moe_projection.py
     ```
-2. use **projection.ipynb**
+2. run with jupyter notebook: **projection.ipynb**
 
 ## Example
 ### Mixtral-8x7B
-![Mixtral-8x7B Projection](./figure/mixtral_proj_plot.png)
-![Mixtral-8x7B_projection_table](./figure/mixtral_proj_table.png)
+#### Projection Plot
+![Mixtral-8x7B projection](./figure/mixtral_proj_plot.png)
+#### Projection Table
+![Mixtral-8x7B projection table](./figure/mixtral_proj_table.png)
+#### Bound Analysis
+![Mixtral-8x7B analysis table](./figure/mixtral_analysis_table.png)
 
 ## Notes
 1. Currently only with single card, will support multi-card / multi-node.
