@@ -4,13 +4,12 @@ import matplotlib.pyplot as plt
 
 
 device_bw_tops = {
-    "Gaudi2H_FP32": [2.24e12, 114e12, 11e12],
-    "Gaudi2H_FP16": [2.24e12, 420e12, 22e12],
-    "Gaudi2H_BF16": [2.24e12, 420e12, 22e12],
-    "Gaudi2H_FP8": [2.24e12, 840e12, 22e12],
-    "Gaudi2C_FP16": [2.24e12, 287e12, 22e12],
-    "Gaudi2C_BF16": [2.24e12, 287e12, 22e12],
-    "Gaudi2C_FP8": [2.24e12, 574e12, 22e12],
+    "Gaudi2H": {"bf16": [2.24e12, 420e12, 22e12],
+                "fp8": [2.24e12, 840e12, 22e12]},
+    "Gaudi2C": {"bf16": [2.24e12, 287e12, 22e12],
+                "fp8": [2.24e12, 574e12, 22e12]},
+    "Gaudi2D": {"bf16": [2.24e12, 143e12, 22e12],
+                "fp8": [2.24e12, 287e12, 22e12]},
 }
 
 type2bytes = {
@@ -20,12 +19,12 @@ type2bytes = {
     "fp8": 1,
 }
 
-type2devices = {
-    "fp32": "Gaudi2H_FP32",
-    "fp16": "Gaudi2H_BF16",
-    "bf16": "Gaudi2C_BF16",  # "Gaudi2H_BF16",
-    "fp8": "Gaudi2C_FP8",  # "Gaudi2H_FP8",
-}
+# type2devices = {
+#     "fp32": "Gaudi2H_FP32",
+#     "fp16": "Gaudi2H_BF16",
+#     "bf16": "Gaudi2C_BF16",  # "Gaudi2H_BF16",
+#     "fp8": "Gaudi2C_FP8",  # "Gaudi2H_FP8",
+# }
 
 
 item_list = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts",
@@ -325,19 +324,28 @@ def proj_mlp_down_or_w2(model_config):
 
 
 def print_projection(projection_dict):
-    for key, projection in projection_dict.items():
-        for _, proj in projection.items():
-            print(key.center(150))
-            for data in proj:
-                print(tabulate(data))
+    proj_prefill, proj_decode = projection_dict["prefill"], projection_dict["decode"]
+    # for key, projection in projection_dict.items():
+    for (_, prefill), (_, decode) in zip(proj_prefill.items(), proj_decode.items()):
+        print("prefill".center(130))
+        for data in prefill:
+            print(tabulate(data))
+        print("decode".center(130))
+        for data in decode:
+            print(tabulate(data))
+        print("\n\n")
 
 
 def print_analysis(analysis_dict, batchsize_list):
-    for key, analysis in analysis_dict.items():
-        for bs in batchsize_list:
-            for data in analysis:
-                print(key.center(100))
-                print(tabulate(data[bs]))
+    analysis_prefill, analysis_decode = analysis_dict["prefill"], analysis_dict["decode"]
+    # for key, analysis in analysis_dict.items():
+    for prefill, decode in zip(analysis_prefill, analysis_decode):
+        for bs in [batchsize_list[0], batchsize_list[-1]]:
+            print("prefill".center(100))
+            print(tabulate(prefill[bs]))
+            print("decode".center(100))
+            print(tabulate(decode[bs]))
+            print("\n\n")
 
 
 def plot_projection(projection_dict, batchsize_list):
