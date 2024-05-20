@@ -16,6 +16,6 @@
 #### Bound Analysis
 ![Mixtral-8x7B analysis table](./figure/mixtral_analysis_table.png)
 
-## Notes
+## Todo
 1. Currently only with single card, will support multi-card / multi-node.
 2. Only cover Mixtral-8x7B, will cover more.
