@@ -1,59 +1,9 @@
 from tqdm import tqdm
-from base import *
+from compute import *
+from memory import *
 
 
-def proj_attn(model_config):
-    qk = proj_attn_qk(model_config)
-    softmax = proj_attn_softmax(model_config)
-    scorev = proj_attn_scorev(model_config)
-    runtime_attn = qk["latency"] + softmax["latency"] + scorev["latency"]
-
-    return runtime_attn, (qk, softmax, scorev)
-
-
-def proj_mlp(model_config):
-    up = proj_mlp_up_or_w1(model_config)
-    if model_config.with_gate:
-        gate = proj_mlp_gate_or_w3(model_config)
-    down = proj_mlp_down_or_w2(model_config)
-
-    runtime_mlp = up["latency"] + down["latency"]
-    if model_config.with_gate:
-        runtime_mlp += gate["latency"]
-
-    return runtime_mlp, (up, down, gate if model_config.with_gate else None)
-
-
-def proj_moe(model_config):
-    runtime_mlp, mlp_items = proj_mlp(model_config)
-    runtime_moe = runtime_mlp * model_config.num_experts
-
-    return runtime_moe, mlp_items
-
-
-def proj_single_layer(model_config):
-    qkvo_proj = proj_qkvo_proj(model_config)
-    runtime_attn, attn_items = proj_attn(model_config)
-    runtime_moe, moe_items = proj_moe(model_config)
-    runtime_single_layer = qkvo_proj["latency"] + runtime_attn + runtime_moe
-
-    single_layer_items = {
-        "qkvo": qkvo_proj,
-        "attn": attn_items,
-        "moe": moe_items,
-    }
-
-    return runtime_single_layer, single_layer_items
-
-
-def proj_decoder(model_config):
-    runtime_single_layer, single_layer_items = proj_single_layer(model_config)
-    runtime_decoder = runtime_single_layer * model_config.num_layers
-
-    return runtime_decoder, single_layer_items
-
-
-if __name__ == "__main__":
+def compute_analyzer():
     hidden_size = 4096
     num_heads_q = 32
     num_heads_kv = 8
@@ -85,7 +35,7 @@ if __name__ == "__main__":
             print(
                 f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
             projection_dict["prefill"][dtype] = []
-            prefill_projection = [item_list]
+            prefill_projection = [cmp_item_list]
             prefill_layer_analysis = dict()
             for in_out in in_out_token_list:
                 for bs in tqdm(batchsize_list):
@@ -124,7 +74,7 @@ if __name__ == "__main__":
             print(
                 f"projection decoding with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
             projection_dict["decode"][dtype] = []
-            decoding_projection = [item_list]
+            decoding_projection = [cmp_item_list]
             decoding_layer_analysis = dict()
             for in_out in in_out_token_list:
                 for bs in tqdm(batchsize_list):
@@ -163,3 +113,56 @@ if __name__ == "__main__":
     print_projection(projection_dict)
     print_analysis(analysis_dict, batchsize_list)
     plot_projection(projection_dict, batchsize_list)
+
+
+def memory_analyzer():
+    hidden_size = 4096
+    num_heads_q = 32
+    num_heads_kv = 8
+    intermediate_size = 14336
+    mlp_with_gate = True
+    num_experts = 8
+    num_layers = 32
+
+    device_list = ["Gaudi2C"]
+    # num_devices_list = [1, 2, 4, 8, 16, 32, 64]
+    num_devices_list = [1, 2, 4, 8]
+    # dtype_list = ["bf16", "fp8"]
+    dtype_list = ["bf16"]
+    # in_out_token_list = [{"in": 128, "out": 128}, {"in": 1024, "out": 1024}, {
+    #     "in": 1, "out": 2048}, {"in": 32000, "out": 512}]
+    in_out_token_list = [{"in": 4096, "out": 1}]
+    batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128]
+
+    memory_dict = {}
+
+    for device in device_list:
+        for num_devices in num_devices_list:
+            memory_dict[num_devices] = {}
+            for dtype in dtype_list:
+                num_bytes = type2bytes[dtype]
+                bw = device_bw_tops[device][dtype][0]
+                tops = device_bw_tops[device][dtype][1]
+                tops_tpc = device_bw_tops[device][dtype][2]
+                device_mem = device_hbm_memory[device]
+
+                print(
+                    f"memory usage with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
+                memory_dict[num_devices][dtype] = [mem_item_list]
+                for in_out in in_out_token_list:
+                    for bs in tqdm(batchsize_list):
+                        model_config = Config(batch_size=bs, seq_len_q=in_out["in"], seq_len_kv=in_out["in"], hidden_size=hidden_size, num_heads_q=num_heads_q,
+                                              num_heads_kv=num_heads_kv, intermediate_size=intermediate_size, is_decoding=False, num_bytes=num_bytes, bw=bw, tops=tops,
+                                              tops_tpc=tops_tpc, with_gate=mlp_with_gate, num_experts=num_experts, num_layers=num_layers, num_devices=num_devices)
+                        mem_persist, mem_activat = mem_decoder(model_config)
+                        mem_analysis = (mem_persist + mem_activat) / 1024 / 1024 / 1024
+                        memory_dict[num_devices][dtype].append([device, model_config.num_devices, model_config.num_layers, in_out["in"], in_out["out"], dtype,
+                                                   bs, round(mem_analysis, 2), True if mem_analysis < device_mem else False])
+                print("done!\n")
+
+        print_mem_analysis(memory_dict, batchsize_list)
+
+
+if __name__ == "__main__":
+    compute_analyzer()
+    memory_analyzer()
