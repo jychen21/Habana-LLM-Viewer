@@ -5,7 +5,7 @@
     ```sh
     python moe_projection.py
     ```
-2. run with jupyter notebook: **projection.ipynb**
+2. run with jupyter notebook: **moe_projection.ipynb**
 
 ## Example (Mixtral-8x7B)
 ### Compute
