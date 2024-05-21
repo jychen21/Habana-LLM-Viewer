@@ -19,14 +19,6 @@ type2bytes = {
     "fp8": 1,
 }
 
-# type2devices = {
-#     "fp32": "Gaudi2H_FP32",
-#     "fp16": "Gaudi2H_BF16",
-#     "bf16": "Gaudi2C_BF16",  # "Gaudi2H_BF16",
-#     "fp8": "Gaudi2C_FP8",  # "Gaudi2H_FP8",
-# }
-
-
 item_list = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts",
              "Layers", "Input", "Output", "DType", "BS", "Latency(s)", "Throughput(tokens/sec)"]
 layer_analysis_list = ["Input", "Output", "DataType", "BatchSize", "LayerName",
@@ -148,13 +140,12 @@ def proj_attn_softmax(model_config):
 
     params_total = params_in + params_out
     # 2 for tpc default dtype as bf16, model_config.num_bytes
-    bytes_total = params_total * 2
+    bytes_total = params_total * model_config.num_bytes
     runtime_memory = bytes_total / model_config.bw
 
     # compute (max, x-max, exp(x-max), sum(exp(x-max)), x/sum(exp(x-max)))
     num_ops = model_config.batch_size * model_config.num_heads_q * \
-        model_config.seq_len_q * head_dim * \
-        model_config.seq_len_kv * 5  # 5 for traversal times
+        model_config.seq_len_q * model_config.seq_len_kv * 5  # 5 for traversal times
     runtime_compute = num_ops / model_config.tops_tpc
 
     # arithmetic intensity (#flops / #bytes)
