@@ -90,8 +90,6 @@ def proj_attn_qk(model_config):
 
 
 def proj_attn_softmax(model_config):
-    head_dim = model_config.hidden_size // model_config.num_heads_q
-
     # memory (in & out)
     params_in = model_config.batch_size * model_config.num_heads_q * \
         model_config.seq_len_q * model_config.seq_len_kv
@@ -99,7 +97,6 @@ def proj_attn_softmax(model_config):
         model_config.seq_len_q * model_config.seq_len_kv
 
     params_total = params_in + params_out
-    # 2 for tpc default dtype as bf16, model_config.num_bytes
     bytes_total = params_total * model_config.num_bytes
     runtime_memory = bytes_total / model_config.bw
 

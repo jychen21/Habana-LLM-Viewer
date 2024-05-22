@@ -19,6 +19,7 @@ type2bytes = {
     "fp8": 1,
 }
 
+# gigabytes
 device_hbm_memory = {
     "Gaudi2H": 96,
     "Gaudi2C": 96,
@@ -28,7 +29,7 @@ device_hbm_memory = {
 
 class Config:
     def __init__(self, batch_size, seq_len_q, seq_len_kv, hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-                 is_decoding, num_bytes, bw, tops, tops_tpc, with_gate, num_experts, num_layers, num_devices=1):
+                 is_decoding, with_gate, num_experts, num_layers_mlp, num_layers_moe, dtype, device, pp=1, tp=1):
         self.batch_size = batch_size
         self.seq_len_q = seq_len_q
         self.seq_len_kv = seq_len_kv
@@ -37,16 +38,23 @@ class Config:
         self.num_heads_kv = num_heads_kv
         self.intermediate_size = intermediate_size
         self.is_decoding = is_decoding
-        self.num_bytes = num_bytes
-        self.bw = bw
-        self.tops = tops
-        self.tops_tpc = tops_tpc
         self.with_gate = with_gate
         self.num_experts = num_experts
-        self.num_layers = num_layers
+        self.num_layers_mlp = num_layers_mlp
+        self.num_layers_moe = num_layers_moe
+        self.num_layers = self.num_layers_mlp + self.num_layers_moe
         self.kvcache_bucket = False
-        self.hardware_ai = tops / bw
-        self.hardware_ai_attn = tops / bw
+        self.dtype = dtype
+        self.num_bytes = type2bytes[self.dtype]
+        self.device = device
+        self.bw = device_bw_tops[self.device][self.dtype][0]
+        self.tops = device_bw_tops[self.device][self.dtype][1]
+        self.tops_tpc = device_bw_tops[self.device][self.dtype][2]
+        self.hardware_ai = self.tops / self.bw
+        self.hardware_ai_attn = self.tops / self.bw
         if self.is_decoding:
             self.hardware_ai_attn /= 128  # 128 for Gaudi2
-        self.num_devices = num_devices # currently just for memory fit analysis
+        self.device_mem = device_hbm_memory[self.device]
+        self.pp = pp  # currently just for memory fit analysis
+        self.tp = tp  # currently just for memory fit analysis
+        self.num_devices = self.pp * self.tp  # currently just for memory fit analysis
