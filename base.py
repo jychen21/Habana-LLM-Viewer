@@ -39,7 +39,8 @@ model_dict = {
 
 class Config:
     def __init__(self, batch_size, seq_len_q, seq_len_kv, hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-                 is_decoding, mlp_with_gate, num_experts, num_layers_mlp, num_layers_moe, dtype, device, pp=1, tp=1):
+                 is_decoding, mlp_with_gate, num_experts, num_layers_mlp, num_layers_moe, dtype, device, pp=1, tp=1,
+                 kvcache_bucket=False):
         self.batch_size = batch_size
         self.seq_len_q = seq_len_q
         self.seq_len_kv = seq_len_kv
@@ -53,7 +54,6 @@ class Config:
         self.num_layers_mlp = num_layers_mlp
         self.num_layers_moe = num_layers_moe
         self.num_layers = self.num_layers_mlp + self.num_layers_moe
-        self.kvcache_bucket = False
         self.dtype = dtype
         self.num_bytes = type2bytes[self.dtype]
         self.device = device
@@ -71,4 +71,4 @@ class Config:
         self.pp = pp  # currently just for memory fit analysis
         self.tp = tp  # currently just for memory fit analysis
         self.num_devices = self.pp * self.tp  # currently just for memory fit analysis
-        self.kvcache_bucket = False
+        self.kvcache_bucket = kvcache_bucket
