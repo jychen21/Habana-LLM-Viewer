@@ -27,7 +27,7 @@ def proj_qkvo_proj(model_config):
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.hidden_size * 2 * 4  # 4 for qkvo
     tops = min(model_config.tops, model_config.tops *
-               (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
+               (model_config.batch_size * model_config.seq_len_q / model_config.mme_tops_factor))
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -115,7 +115,7 @@ def proj_attn_softmax(model_config):
         "math_ai": math_ai,
         "tops_roofline": min(model_config.tops_tpc, math_ai * model_config.bw),
         "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < model_config.hardware_ai_attn else "compute"
+        "bound": "memory" if math_ai < model_config.hardware_ai_tpc else "compute"
     }
 
     return proj_rst
@@ -179,7 +179,7 @@ def proj_mlp_gate_or_w3(model_config):
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
-               (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
+               (model_config.batch_size * model_config.seq_len_q / model_config.mme_tops_factor))
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -215,7 +215,7 @@ def proj_mlp_up_or_w1(model_config):
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
-               (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
+               (model_config.batch_size * model_config.seq_len_q / model_config.mme_tops_factor))
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -251,7 +251,7 @@ def proj_mlp_down_or_w2(model_config):
     num_ops = model_config.batch_size * model_config.seq_len_q * \
         model_config.hidden_size * model_config.intermediate_size * 2
     tops = min(model_config.tops, model_config.tops *
-               (model_config.batch_size * model_config.seq_len_q / 128))  # 128 for Gaudi2
+               (model_config.batch_size * model_config.seq_len_q / model_config.mme_tops_factor))
 
     # arithmetic intensity (#flops / #bytes)
     math_ai = num_ops / bytes_total
@@ -275,22 +275,23 @@ def proj_attn(model_config):
     qk = proj_attn_qk(model_config)
     softmax = proj_attn_softmax(model_config)
     scorev = proj_attn_scorev(model_config)
-    runtime_attn = qk["latency"] + softmax["latency"] + scorev["latency"]
+    runtime_attn = (qk["latency"] + softmax["latency"] +
+                    scorev["latency"])  # *13/2
 
     return runtime_attn, (qk, softmax, scorev)
 
 
 def proj_mlp(model_config):
     up = proj_mlp_up_or_w1(model_config)
-    if model_config.with_gate:
+    if model_config.mlp_with_gate:
         gate = proj_mlp_gate_or_w3(model_config)
     down = proj_mlp_down_or_w2(model_config)
 
     runtime_mlp = up["latency"] + down["latency"]
-    if model_config.with_gate:
+    if model_config.mlp_with_gate:
         runtime_mlp += gate["latency"]
 
-    return runtime_mlp, (up, down, gate if model_config.with_gate else None)
+    return runtime_mlp, (up, down, gate if model_config.mlp_with_gate else None)
 
 
 def proj_moe(model_config):
@@ -311,6 +312,25 @@ def proj_single_layer(model_config):
         "attn": attn_items,
         "moe": moe_items,
     }
+    qk = attn_items[0]
+    softmax = attn_items[1]
+    scorev = attn_items[2]
+    up = moe_items[0]
+    # print("\n")
+    # print("qkvo ", model_config.batch_size, qkvo_proj["#mem"], round(qkvo_proj["math_ai"], 2), round(
+    #     qkvo_proj["tops_roofline"]/1e12, 2), round(qkvo_proj["latency"]*1e6, 2), "us")
+    # print("qk ", model_config.batch_size, qk["#mem"], round(qk["math_ai"], 2), round(
+    #     qk["tops_roofline"]/1e12, 2), round(qk["latency"]*1e6, 2), "us")
+    # print("softmax ", model_config.batch_size, softmax["#mem"], round(softmax["math_ai"], 2), round(
+    #     softmax["tops_roofline"]/1e12, 2), round(softmax["latency"]*1e6, 2), "us")
+    # print("scorev ", model_config.batch_size, scorev["#mem"], round(scorev["math_ai"], 2), round(
+    #     scorev["tops_roofline"]/1e12, 2), round(scorev["latency"]*1e6, 2), "us")
+    # print("up/down/gate ", model_config.batch_size, up["#mem"], round(
+    #     up["math_ai"], 2), round(up["tops_roofline"]/1e12, 2), round(up["latency"]*1e6, 2), "us")
+    # print("attn ", round(runtime_attn*1e6, 2), "us")
+    # print("mlp ", round(runtime_moe*1e6, 2), "us")
+    # print("attn : all ", round(runtime_attn /
+    #       (qkvo_proj["latency"] + runtime_attn + runtime_moe), 4))
 
     return runtime_single_layer, single_layer_items
 

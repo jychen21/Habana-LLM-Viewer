@@ -82,20 +82,20 @@ def mem_persistent_weights(model_config):
 
     def mem_mlp_persist():
         up = mem_mlp_up_or_w1()
-        if model_config.with_gate:
+        if model_config.mlp_with_gate:
             gate = mem_mlp_gate_or_w3()
         down = mem_mlp_down_or_w2()
 
         params_total = up["param"] + down["param"]
         mem_mlp = up["#mem"] + down["#mem"]
-        if model_config.with_gate:
+        if model_config.mlp_with_gate:
             params_total += gate["param"]
             mem_mlp += gate["#mem"]
 
         item_dict = {
             "mem_up(w1)": up,
             "mem_down(w2)": down,
-            "mem_gate(w3)": gate if model_config.with_gate else None
+            "mem_gate(w3)": gate if model_config.mlp_with_gate else None
         }
 
         mem_rst = {
@@ -379,4 +379,21 @@ def print_mem_analysis(memory_dict, batchsize_list):
         for tp, tp_dict in pp_dict.items():
             for dtype, mem_data in tp_dict.items():
                 print(tabulate(mem_data))
+            print("\n")
+
+
+def print_projected_mem_per_device(memory_dict, batchsize_list, in_out_token_list):
+    proj_dict = {}
+    for pp, pp_dict in memory_dict.items():
+        proj_dict[pp] = {}
+        for tp, tp_dict in pp_dict.items():
+            proj_dict[pp][tp] = {}
+            for dtype, mem_data in tp_dict.items():
+                proj_dict[pp][tp][dtype] = {}
+                for data in mem_data:
+                    proj_dict[pp][tp][dtype][data[5]][data[8]] = [data[-2]]
+                    # proj_dict[pp][tp][dtype][data[8]].append(data[-2])
+                print(proj_dict[pp][tp][dtype])
+
+                # print(tabulate(mem_data))
             print("\n")

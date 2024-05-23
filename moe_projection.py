@@ -1,28 +1,21 @@
 from tqdm import tqdm
+from base import *
 from compute import *
 from memory import *
 
 
-def compute_analyzer():
-    hidden_size = 4096
-    num_heads_q = 32
-    num_heads_kv = 8
-    intermediate_size = 14336
-    mlp_with_gate = True
-    num_experts = 8
-    num_layers_moe = 32
-    num_layers_mlp = 0
+def compute_analyzer(model_name, device_list, dtype_list, batchsize_list, context_list):
+    model = model_dict[model_name]
+    hidden_size = model["hidden_size"]
+    num_heads_q = model["num_heads_q"]
+    num_heads_kv = model["num_heads_kv"]
+    intermediate_size = model["intermediate_size"]
+    mlp_with_gate = model["mlp_with_gate"]
+    num_layers_mlp = model["num_layers_mlp"]
+    num_layers_moe = model["num_layers_moe"]
+    num_experts = model["num_experts"]
 
-    device_list = ["Gaudi2C"]
-    dtype_list = ["bf16"]  # ["bf16", "fp8"]
-    # in_out_token_list = [{"in": 128, "out": 128}, {"in": 1024, "out": 1024}, {
-    #     "in": 1, "out": 2048}, {"in": 32000, "out": 512}]
-    in_out_token_list = [{"in": 128, "out": 128}]
-    batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048]
-    # batchsize_list = [1, 4, 16, 24, 28, 32,
-    #                   48, 56, 60, 64, 96, 112, 128, 256, 512]
-
-    projection_dict = {"prefill": {}, "decode": {}}
+    projection_dict = {"prefill": {}, "decode": {}, "total": {}}
     analysis_dict = {"prefill": [], "decode": []}
 
     for device in device_list:
@@ -30,15 +23,15 @@ def compute_analyzer():
 
             # prefill
             print(
-                f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
+                f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {context_list} and bs {batchsize_list}...")
             projection_dict["prefill"][dtype] = []
             prefill_projection = [cmp_item_list]
             prefill_layer_analysis = dict()
-            for in_out in in_out_token_list:
+            for in_out in context_list:
                 for bs in tqdm(batchsize_list):
                     prefill_layer_analysis[bs] = [layer_analysis_list]
                     model_config = Config(batch_size=bs, seq_len_q=in_out["in"], seq_len_kv=in_out["in"], hidden_size=hidden_size, num_heads_q=num_heads_q,
-                                          num_heads_kv=num_heads_kv, intermediate_size=intermediate_size, is_decoding=False, with_gate=mlp_with_gate,
+                                          num_heads_kv=num_heads_kv, intermediate_size=intermediate_size, is_decoding=False, mlp_with_gate=mlp_with_gate,
                                           num_experts=num_experts, num_layers_mlp=num_layers_mlp, num_layers_moe=num_layers_moe, dtype=dtype, device=device)
                     runtime_decoder, single_layer_items = proj_decoder(
                         model_config)
@@ -69,15 +62,15 @@ def compute_analyzer():
 
             # decode
             print(
-                f"projection decoding with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...")
+                f"projection decoding with dtype[{dtype}], device [{device}] with seq_len: {context_list} and bs {batchsize_list}...")
             projection_dict["decode"][dtype] = []
             decoding_projection = [cmp_item_list]
             decoding_layer_analysis = dict()
-            for in_out in in_out_token_list:
+            for in_out in context_list:
                 for bs in tqdm(batchsize_list):
                     decoding_layer_analysis[bs] = [layer_analysis_list]
                     model_config = Config(batch_size=bs, seq_len_q=1, seq_len_kv=in_out["out"], hidden_size=hidden_size, num_heads_q=num_heads_q,
-                                          num_heads_kv=num_heads_kv, intermediate_size=intermediate_size, is_decoding=True, with_gate=mlp_with_gate,
+                                          num_heads_kv=num_heads_kv, intermediate_size=intermediate_size, is_decoding=True, mlp_with_gate=mlp_with_gate,
                                           num_experts=num_experts, num_layers_mlp=num_layers_mlp, num_layers_moe=num_layers_moe, dtype=dtype, device=device)
                     runtime_decoder, single_layer_items = proj_decoder(
                         model_config)
@@ -108,40 +101,20 @@ def compute_analyzer():
             analysis_dict["decode"].append(decoding_layer_analysis)
 
     print_projection(projection_dict)
-    print_analysis(analysis_dict, batchsize_list)
+    # print_analysis(analysis_dict, batchsize_list)
     plot_projection(projection_dict, batchsize_list)
 
 
-def memory_analyzer():
-    hidden_size = 4096
-    num_heads_q = 32
-    num_heads_kv = 8
-    intermediate_size = 14336
-    mlp_with_gate = True
-    num_experts = 8
-    num_layers_moe = 32
-    num_layers_mlp = 0
-
-    device_list = ["Gaudi2C"]
-    device_pp_list = [1, 1, 1, 1, 1, 1, 1]
-    # device_tp_list = [1, 2, 4, 8, 16, 32, 64]
-    device_tp_list = [1, 2, 4, 8]
-    # num_devices_list = [1, 2, 4, 8, 16, 32, 64]
-    num_devices_list = [1, 2, 4, 8]
-    # dtype_list = ["bf16", "fp8"]
-    # dtype_list = ["bf16"]
-    dtype_list = ["fp8"]
-    # in_out_token_list = [{"in": 128, "out": 128}, {"in": 1024, "out": 1024}, {
-    #     "in": 1, "out": 2048}, {"in": 32000, "out": 512}]
-    in_out_token_list = []
-    len_factor = 1024
-    input_list = [2*len_factor]
-    context_length_list = [pow(2, i) * len_factor for i in range(2, 6)]
-    for input in input_list:
-        for context_len in context_length_list:
-            output = context_len - input
-            in_out_token_list.append({"in": input, "out": output})
-    batchsize_list = [1, 2, 4, 8, 16, 32, 64, 128]
+def memory_analyzer(model_name, device_list, dtype_list, batchsize_list, context_list):
+    model = model_dict[model_name]
+    hidden_size = model["hidden_size"]
+    num_heads_q = model["num_heads_q"]
+    num_heads_kv = model["num_heads_kv"]
+    intermediate_size = model["intermediate_size"]
+    mlp_with_gate = model["mlp_with_gate"]
+    num_layers_mlp = model["num_layers_mlp"]
+    num_layers_moe = model["num_layers_moe"]
+    num_experts = model["num_experts"]
 
     memory_dict = {}
 
@@ -157,11 +130,11 @@ def memory_analyzer():
                     memory_dict[pp][tp][dtype] = [mem_item_list]
 
                     print(
-                        f"memory usage with dtype[{dtype}], device [{device}] with seq_len: {in_out_token_list} and bs {batchsize_list}...\n")
-                    for in_out in in_out_token_list:
+                        f"memory usage with dtype[{dtype}], device [{device}] with seq_len: {context_list} and bs {batchsize_list}...\n")
+                    for in_out in context_list:
                         model_config = Config(batch_size=1, seq_len_q=in_out["in"], seq_len_kv=in_out["in"]+in_out["out"],
                                               hidden_size=hidden_size, num_heads_q=num_heads_q, num_heads_kv=num_heads_kv,
-                                              intermediate_size=intermediate_size, is_decoding=False, with_gate=mlp_with_gate,
+                                              intermediate_size=intermediate_size, is_decoding=False, mlp_with_gate=mlp_with_gate,
                                               num_experts=num_experts, num_layers_mlp=num_layers_mlp,
                                               num_layers_moe=num_layers_moe, dtype=dtype, device=device, pp=pp, tp=tp)
                         mem_persist_weight = mem_persistent_weights(
@@ -169,19 +142,30 @@ def memory_analyzer():
                         single_layer_name = None
                         param_layer_mlp = None
                         param_layer_moe = None
+                        param_up = None
+                        param_gate = None
+                        param_down = None
                         if model_config.num_layers_mlp != 0:
                             single_layer_name = "single_layer_mlp"
                             param_layer_mlp = mem_persist_weight["item"][single_layer_name]["item"]["mem_ffn"]
+                            param_up = mem_persist_weight["item"][single_layer_name]["item"][
+                                "mem_ffn"]["item"]["mem_up(w1)"]["param"]
+                            if model_config.mlp_with_gate:
+                                param_gate = mem_persist_weight["item"][single_layer_name]["item"][
+                                    "mem_ffn"]["item"]["mem_gate(w3)"]["param"]
+                            param_down = mem_persist_weight["item"][single_layer_name]["item"][
+                                "mem_ffn"]["item"]["mem_down(w2)"]["param"]
                         if model_config.num_layers_moe != 0:
                             single_layer_name = "single_layer_moe"
                             param_layer_moe = mem_persist_weight["item"][single_layer_name]["item"]["mem_ffn"]
+                            param_up = mem_persist_weight["item"][single_layer_name]["item"][
+                                "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_up(w1)"]["param"]
+                            if model_config.mlp_with_gate:
+                                param_gate = mem_persist_weight["item"][single_layer_name]["item"][
+                                    "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_gate(w3)"]["param"]
+                            param_down = mem_persist_weight["item"][single_layer_name]["item"][
+                                "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_down(w2)"]["param"]
                         param_qkvo = mem_persist_weight["item"][single_layer_name]["item"]["mem_qkvo"]["param"]
-                        param_up = mem_persist_weight["item"][single_layer_name]["item"][
-                            "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_up(w1)"]["param"]
-                        param_gate = mem_persist_weight["item"][single_layer_name]["item"][
-                            "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_gate(w3)"]["param"]
-                        param_down = mem_persist_weight["item"][single_layer_name]["item"][
-                            "mem_ffn"]["item"]["mem_mlp"]["item"]["mem_down(w2)"]["param"]
                         param_expert = mem_persist_weight["item"][single_layer_name]["item"]["mem_ffn"]["param"]
                         param_total = mem_persist_weight["param"]
                         mem_total = mem_persist_weight["#mem"]
@@ -198,8 +182,33 @@ def memory_analyzer():
                     print("done!\n")
 
         print_mem_analysis(memory_dict, batchsize_list)
+        # print_projected_mem_per_device(
+        #     memory_dict, batchsize_list, context_list)
 
 
 if __name__ == "__main__":
-    compute_analyzer()
-    memory_analyzer()
+    # ["Llama2-7B", "Llama2-13B", "Mixtral-8x7B", "GLaM-1.2T", "MoE-1.8T"]
+    model_name = "Llama2-7B"
+
+    device_list = ["Gaudi2C"]
+    device_pp_list = [1, 1, 1, 1, 1, 1, 1]
+    device_tp_list = [8]  # [1, 2, 4, 8, 16]
+    dtype_list = ["bf16"]  # ["bf16", "fp8"]
+    batchsize_list = [1, 2, 4, 8, 16, 32, 64]  # , 128, 129, 256, 512] # 129
+    context_list = [{"in": 128, "out": 2048}]
+    # context_list = [{"in": 128, "out": 128}, {"in": 1024, "out": 1024}, {
+    #     "in": 1, "out": 2048}, {"in": 32000, "out": 512}]
+
+    compute_analyzer(model_name, device_list, dtype_list,
+                     batchsize_list, context_list)
+
+    context_list = [{"in": 2048, "out": 2048}]
+    # len_factor = 1024
+    # input_list = [2*len_factor]
+    # context_length_list = [pow(2, i) * len_factor for i in range(2, 6)]
+    # for input in input_list:
+    #     for context_len in context_length_list:
+    #         output = context_len - input
+    #         context_list.append({"in": input, "out": output})
+    memory_analyzer(model_name, device_list, dtype_list,
+                    batchsize_list, context_list)
