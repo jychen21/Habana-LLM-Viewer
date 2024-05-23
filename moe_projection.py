@@ -101,11 +101,11 @@ def compute_analyzer(model_name, device_list, dtype_list, batchsize_list, contex
             analysis_dict["decode"].append(decoding_layer_analysis)
 
     print_projection(projection_dict)
-    # print_analysis(analysis_dict, batchsize_list)
+    print_analysis(analysis_dict, batchsize_list)
     plot_projection(projection_dict, batchsize_list)
 
 
-def memory_analyzer(model_name, device_list, dtype_list, batchsize_list, context_list):
+def memory_analyzer(model_name, device_list, device_pp_list, device_tp_list, dtype_list, batchsize_list, context_list):
     model = model_dict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
@@ -210,5 +210,5 @@ if __name__ == "__main__":
     #     for context_len in context_length_list:
     #         output = context_len - input
     #         context_list.append({"in": input, "out": output})
-    memory_analyzer(model_name, device_list, dtype_list,
+    memory_analyzer(model_name, device_list, device_pp_list, device_tp_list, dtype_list,
                     batchsize_list, context_list)
