@@ -31,19 +31,24 @@ def proj_qkvo_proj(config):
     num_ops = batch_size * seq_len_q * hidden_size * hidden_size * 2 * 4  # 4 for qkvo
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "qkvo_proj",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -72,22 +77,24 @@ def proj_attn_qk(config):
 
     num_ops = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
     tops = min(flops_mme, flops_mme * (seq_len_q / flops_mme_factor))
-    # if is_decoding: # seq_len_q = 1
-    # tops = min(tops, tops * (batch_size / 128))
-    # tops /= flops_mme_attn_factor
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "q@k_T",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme_attn,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme_attn else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -115,16 +122,23 @@ def proj_attn_softmax(config):
         seq_len_kv * 5  # 5 for traversal times
     runtime_compute = num_ops / flops_vec
 
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
+
     math_ai = num_ops / bytes_total
 
     proj_rst = {
         "name": "softmax",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_vec,
         "math_ai": math_ai,
         "tops_roofline": min(flops_vec, math_ai * bw),
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_vec else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -153,19 +167,24 @@ def proj_attn_scorev(config):
 
     num_ops = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
     tops = min(flops_mme, flops_mme * (seq_len_q / flops_mme_factor))
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "score@v",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme_attn,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme_attn else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -192,19 +211,24 @@ def proj_mlp_up_or_w1(config):
     num_ops = batch_size * seq_len_q * hidden_size * intermediate_size * 2
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "up(w1)",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -231,19 +255,24 @@ def proj_mlp_down_or_w2(config):
     num_ops = batch_size * seq_len_q * intermediate_size * hidden_size * 2
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "down(w2)",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -270,19 +299,24 @@ def proj_mlp_gate_or_w3(config):
     num_ops = batch_size * seq_len_q * hidden_size * intermediate_size * 2
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    tops = min(tops, math_ai * bw)
-    runtime_compute = num_ops / tops
+    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
         "name": "gate(w3)",
         "operations": num_ops,
-        "memory": bytes_total,
+        "size": bytes_total,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
-        "latency": runtime_memory if runtime_memory > runtime_compute else runtime_compute,
-        "bound": "memory" if math_ai < hw_ai_mme else "compute"
+        "bw": bw,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+        "bound": bound
     }
 
     return proj_rst
@@ -325,21 +359,33 @@ def proj_moe(config):
 def proj_single_layer(config):
     qkvo_proj = proj_qkvo_proj(config)
     runtime_attn, attn_items = proj_attn(config)
-    runtime_moe, moe_items = proj_moe(config)
+    runtime_moe, ffn_items = proj_moe(config)
     runtime_single_layer = qkvo_proj["latency"] + runtime_attn + runtime_moe
 
-    single_layer_items = {
-        "qkvo": qkvo_proj,
-        "attn": attn_items,
-        "moe": moe_items,
-    }
     qk = attn_items[0]
     softmax = attn_items[1]
     scorev = attn_items[2]
-    up = moe_items[0]
+    up = ffn_items[0]
 
+    hidden_size = config.model_config.hidden_size
+    inter_size = config.model_config.intermediate_size
+    num_heads_q = config.model_config.num_heads_q
+    head_dim = hidden_size // num_heads_q
     batch_size = config.input_config.batch_size
+    seq_len_q = config.input_config.seq_len_q
 
+    single_layer_items = {
+        "hidden_size": hidden_size,
+        "inter_size": inter_size,
+        "headsq": num_heads_q,
+        "tq": seq_len_q,
+        "headdim": head_dim,
+        "qkvo": qkvo_proj,
+        "attn": attn_items,
+        "ffn": ffn_items,
+    }
+
+    '''
     print("\n")
     print("qkvo ", batch_size, qkvo_proj["memory"], round(qkvo_proj["math_ai"], 2), round(
         qkvo_proj["tops_roofline"]/1e12, 2), round(qkvo_proj["latency"]*1e6, 2), "us")
@@ -356,6 +402,7 @@ def proj_single_layer(config):
     print("mlp ", round(runtime_moe*1e6, 2), "us")
     print("attn : all ", round(runtime_attn /
           (qkvo_proj["latency"] + runtime_attn + runtime_moe), 4))
+    '''
 
     return runtime_single_layer, single_layer_items
 
@@ -379,6 +426,114 @@ def print_projection(projection_dict, model_name):
         for data in decode:
             print(tabulate(data))
         print("\n\n")
+
+
+def print_layer_projection(layer_projection_dict, device, type, model_name, context_list, batchsize_list):
+    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "SeqLenQ", "HeadDim", "Ops(QK+SV)(M)", "Size(MB)",
+                           "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
+    mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "HiddenSize", "IntermediateSize", "Ops(up)(M)",
+                          "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
+    megabytes = 1024 * 1024
+    megaparam = 1024 * 1024
+    microsecs = 1e6
+    tflops = 1e12
+    tbw = 1e12
+
+    layer_proj_prefill, layer_proj_decode = layer_projection_dict[
+        "prefill"], layer_projection_dict["decode"]
+    for (dtype, layer_proj_dict_prefill), (_, layer_proj_dict_decode) in \
+            zip(layer_proj_prefill.items(), layer_proj_decode.items()):
+        for in_out in range(len(context_list)):
+            bmm_layer_proj_prefill_list = [bmm_layer_proj_item]
+            bmm_layer_proj_decode_list = [bmm_layer_proj_item]
+            mm_layer_proj_prefill_list = [mm_layer_proj_item]
+            mm_layer_proj_decode_list = [mm_layer_proj_item]
+
+            for bs_idx in range(len(batchsize_list)):
+                layer_proj_prefill = layer_proj_dict_prefill[in_out][bs_idx]
+                layer_proj_decode = layer_proj_dict_decode[in_out][bs_idx]
+                bs = batchsize_list[bs_idx]
+                hidden_size = layer_proj_prefill["hidden_size"]
+                inter_size = layer_proj_prefill["inter_size"]
+                headsq = layer_proj_prefill["headsq"]
+                headdim = layer_proj_prefill["headdim"]
+
+                # attn(bmm) prefill
+                tq = layer_proj_prefill["tq"]
+                qk, softmax, scorev = layer_proj_prefill["attn"]
+                attn_ops_wo_softmax = round(
+                    (qk["operations"] + scorev["operations"]) / megaparam, 2)
+                attn_size_wo_softmax = round(
+                    (qk["size"] + scorev["size"]) / megabytes, 2)
+                attn_mem_time_wo_softmax = round(
+                    (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
+                attn_cmp_time_wo_softmax = round(
+                    (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
+                attn_latency_wo_softmax = round(
+                    (qk["latency"] + scorev["latency"]) * microsecs, 2)
+                attn_tops = round(qk["tops_roofline"] / tflops, 2)
+                bw = round(qk["bw"] / tbw, 2)
+                attn_bound_wo_softmax = qk["bound"]
+                bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, headsq, tq, headdim,
+                                                    attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
+                                                    bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
+                                                    attn_latency_wo_softmax, attn_bound_wo_softmax])
+                # attn(bmm) decode
+                tq = layer_proj_decode["tq"]
+                qk, softmax, scorev = layer_proj_decode["attn"]
+                attn_ops_wo_softmax = round(
+                    (qk["operations"] + scorev["operations"]) / megaparam, 2)
+                attn_size_wo_softmax = round(
+                    (qk["size"] + scorev["size"]) / megabytes, 2)
+                attn_mem_time_wo_softmax = round(
+                    (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
+                attn_cmp_time_wo_softmax = round(
+                    (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
+                attn_latency_wo_softmax = round(
+                    (qk["latency"] + scorev["latency"]) * microsecs, 2)
+                attn_tops = round(qk["tops_roofline"] / tflops, 2)
+                bw = round(qk["bw"] / tbw, 2)
+                attn_bound_wo_softmax = qk["bound"]
+                bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, headsq, tq, headdim,
+                                                   attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
+                                                   bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
+                                                   attn_latency_wo_softmax, attn_bound_wo_softmax])
+
+                # ffn_up(mm) prefill / decode
+                up, down, gate = layer_proj_prefill["ffn"]
+                tq = layer_proj_prefill["tq"]
+                up_ops = round(up["operations"] / megaparam, 2)
+                up_size = round(up["size"] / megabytes, 2)
+                up_mem_time = round(up["mem_time"] * microsecs, 2)
+                up_cmp_time = round(up["cmp_time"] * microsecs, 2)
+                up_latency = round(up["latency"] * microsecs, 2)
+                up_tops = round(up["tops_roofline"] / tflops, 2)
+                bw = round(up["bw"] / tbw, 2)
+                up_bound = up["bound"]
+                mm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, tq, hidden_size, inter_size, up_ops,
+                                                   up_size, up_tops, bw, up_mem_time, up_cmp_time, up_latency, up_bound])
+                # ffn_up(mm) decode
+                up, down, gate = layer_proj_decode["ffn"]
+                tq = layer_proj_decode["tq"]
+                up_ops = round(up["operations"] / megaparam, 2)
+                up_size = round(up["size"] / megabytes, 2)
+                up_mem_time = round(up["mem_time"] * microsecs, 2)
+                up_cmp_time = round(up["cmp_time"] * microsecs, 2)
+                up_latency = round(up["latency"] * microsecs, 2)
+                up_tops = round(up["tops_roofline"] / tflops, 2)
+                bw = round(up["bw"] / tbw, 2)
+                up_bound = up["bound"]
+                mm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, hidden_size, inter_size, up_ops,
+                                                  up_size, up_tops, bw, up_mem_time, up_cmp_time, up_latency, up_bound])
+
+            print(f"{model_name}_prefill_attn(bmm)_projection".center(150))
+            print(tabulate(bmm_layer_proj_prefill_list))
+            print(f"{model_name}_decode_attn(bmm)_projection".center(150))
+            print(tabulate(bmm_layer_proj_decode_list), "\n\n")
+            print(f"{model_name}_prefill_ffn_up(mm)_projection".center(150))
+            print(tabulate(mm_layer_proj_prefill_list))
+            print(f"{model_name}_decode_ffn_up(mm)_projection".center(150))
+            print(tabulate(mm_layer_proj_decode_list))
 
 
 def print_analysis(analysis_dict, batchsize_list, model_name):
