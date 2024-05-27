@@ -15,13 +15,13 @@
 
 #### Mixtral-8x7B
 ![Mixtral-8x7B projection](./figure/compute_projection_mixtral-8x7b.png)
-##### Projection Table
+<!-- ##### Projection Table
 ![Mixtral-8x7B projection table](./figure/mixtral_proj_table.png)
 ##### Bound Analysis
 ![Mixtral-8x7B analysis table](./figure/mixtral_analysis_table.png)
 
 ### Memory
-![Mixtral-8x7B memory analysis](./figure/mixtral_memory_analysis.png)
+![Mixtral-8x7B memory analysis](./figure/mixtral_memory_analysis.png) -->
 
 ## Todo
 1. Currently only with single card, will support multi-card / multi-node.
