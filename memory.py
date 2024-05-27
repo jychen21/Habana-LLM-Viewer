@@ -10,282 +10,358 @@ mem_item_list = ["Device", "PP", "TP", "NumDevices", "Layers", "In", "Out", "DTy
                  "BS", "Weights(GB)", "KVcache(GB)", "Activat(GB)", "Total(GB)", "Fit2Device"]
 
 
-def mem_persistent_weights(model_config):
+def mem_persistent_weights(config):
     def mem_qkvo_proj():
-        # persistent memory
-        params_in_weight = model_config.hidden_size * model_config.hidden_size
-        params_total = params_in_weight
+        hidden_size = config.model_config.hidden_size
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+
+        assert hidden_size % tp == 0, \
+            f"hidden_size {hidden_size} should be divisible by tp size {tp}!"
+
+        params_total = hidden_size * hidden_size
         params_total *= 4  # 4 for qkvo
-        params_total /= model_config.num_devices  # assume only TP/PP
-        bytes_total = params_total * model_config.num_bytes
+        params_total /= tp
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
             "name": "qkvo_proj",
-            "param": params_total,
-            "#mem": bytes_total,
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "persistent",
-            "item": {}
-        }
-
-        return mem_rst
-
-    def mem_mlp_gate_or_w3():
-        # persistent memory
-        params_in_weight = model_config.hidden_size * model_config.intermediate_size
-        params_total = params_in_weight
-        params_total /= model_config.num_devices  # assume only TP/PP
-        bytes_total = params_total * model_config.num_bytes
-
-        mem_rst = {
-            "name": "mlp_gate(w3)",
-            "param": params_total,
-            "#mem": bytes_total,
-            "attr": "persistent",
-            "item": {}
+            "items": None
         }
 
         return mem_rst
 
     def mem_mlp_up_or_w1():
-        # persistent memory
-        params_in_weight = model_config.hidden_size * model_config.intermediate_size
-        params_total = params_in_weight
-        params_total /= model_config.num_devices  # assume only TP/PP
-        bytes_total = params_total * model_config.num_bytes
+        hidden_size = config.model_config.hidden_size
+        intermediate_size = config.model_config.intermediate_size
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+
+        assert intermediate_size % tp == 0, \
+            f"hidden_size {intermediate_size} should be divisible by tp size {tp}!"
+
+        params_total = hidden_size * intermediate_size
+        params_total /= tp
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
-            "name": "mlp_up(w1)",
-            "param": params_total,
-            "#mem": bytes_total,
+            "name": "up(w1)",
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "persistent",
-            "item": {}
+            "items": None
         }
 
         return mem_rst
 
     def mem_mlp_down_or_w2():
-        # persistent memory
-        params_in_weight = model_config.intermediate_size * model_config.hidden_size
-        params_total = params_in_weight
-        params_total /= model_config.num_devices  # assume only TP/PP
-        bytes_total = params_total * model_config.num_bytes
+        hidden_size = config.model_config.hidden_size
+        intermediate_size = config.model_config.intermediate_size
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+
+        assert intermediate_size % tp == 0, \
+            f"hidden_size {intermediate_size} should be divisible by tp size {tp}!"
+
+        params_total = intermediate_size * hidden_size
+        params_total /= tp
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
-            "name": "mlp_down(w2)",
-            "param": params_total,
-            "#mem": bytes_total,
+            "name": "down(w2)",
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "persistent",
-            "item": {}
+            "items": None
         }
 
         return mem_rst
 
-    def mem_mlp_persist():
-        up = mem_mlp_up_or_w1()
-        if model_config.mlp_with_gate:
-            gate = mem_mlp_gate_or_w3()
-        down = mem_mlp_down_or_w2()
+    def mem_mlp_gate_or_w3():
+        hidden_size = config.model_config.hidden_size
+        intermediate_size = config.model_config.intermediate_size
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
 
-        params_total = up["param"] + down["param"]
-        mem_mlp = up["#mem"] + down["#mem"]
-        if model_config.mlp_with_gate:
-            params_total += gate["param"]
-            mem_mlp += gate["#mem"]
+        assert intermediate_size % tp == 0, \
+            f"hidden_size {intermediate_size} should be divisible by tp size {tp}!"
 
-        item_dict = {
-            "mem_up(w1)": up,
-            "mem_down(w2)": down,
-            "mem_gate(w3)": gate if model_config.mlp_with_gate else None
+        params_in_weight = hidden_size * intermediate_size
+        params_total = params_in_weight
+        params_total /= tp
+        bytes_total = params_total * num_bytes
+
+        mem_rst = {
+            "name": "gate(w3)",
+            "params": params_total,
+            "memory": bytes_total,
+            "attr": "persistent",
+            "items": None
         }
+
+        return mem_rst
+
+    def mem_mlp():
+        mlp_with_gate = config.model_config.mlp_with_gate
+
+        up = mem_mlp_up_or_w1()
+        down = mem_mlp_down_or_w2()
+        gate = None
+        if mlp_with_gate:
+            gate = mem_mlp_gate_or_w3()
+
+        params_total = up["params"] + down["params"]
+        mem_total = up["memory"] + down["memory"]
+        if mlp_with_gate:
+            params_total += gate["params"]
+            mem_total += gate["memory"]
 
         mem_rst = {
             "name": "mlp",
-            "param": params_total,
-            "#mem": mem_mlp,
+            "params": params_total,
+            "memory": mem_total,
             "attr": "persistent",
-            "item": item_dict
+            "items": {
+                "up": up,
+                "down": down,
+                "gate": gate
+            }
         }
 
         return mem_rst
 
-    def mem_moe_persist():
-        mem_mlp = mem_mlp_persist()
-        params_total = mem_mlp["param"] * model_config.num_experts
-        mem_moe = mem_mlp["#mem"] * model_config.num_experts
+    def mem_moe():
+        num_experts = config.model_config.num_experts
+
+        mlp = mem_mlp()
+        params_total = mlp["params"] * num_experts
+        mem_total = mlp["memory"] * num_experts
 
         mem_rst = {
             "name": "moe",
-            "param": params_total,
-            "#mem": mem_moe,
+            "params": params_total,
+            "memory": mem_total,
             "attr": "persistent",
-            "item": {"mem_mlp": mem_mlp}
+            "items": {
+                "up": mlp["items"]["up"],
+                "down": mlp["items"]["down"],
+                "gate": mlp["items"]["gate"]
+            }
         }
 
         return mem_rst
 
-    def mem_single_layer_mlp_persist():
-        params_total = 0
-        mem_single_layer = 0
-        ffn_name = None
-        item_dict = None
-        if model_config.num_layers_mlp != 0:
-            mem_qkvo = mem_qkvo_proj()
-            mem_ffn = mem_mlp_persist()
-            params_total = mem_qkvo["param"] + mem_ffn["param"]
-            mem_single_layer = mem_qkvo["#mem"] + mem_ffn["#mem"]
-            ffn_name = mem_ffn["name"]
+    def mem_single_layer_mlp():
+        num_layers_mlp = config.model_config.num_layers_mlp
 
-            item_dict = {
-                "mem_qkvo": mem_qkvo,
-                "mem_ffn": mem_ffn
-            }
+        qkvo = None
+        mlp = None
+        params_total = 0
+        mem_total = 0
+        mlp_name = None
+        if num_layers_mlp != 0:
+            qkvo = mem_qkvo_proj()
+            mlp = mem_mlp()
+            params_total = qkvo["params"] + mlp["params"]
+            mem_total = qkvo["memory"] + mlp["memory"]
+            mlp_name = mlp["name"]
 
         mem_rst = {
-            "name": f"single_layer_{ffn_name}",
-            "param": params_total,
-            "#mem": mem_single_layer,
+            "name": f"single_layer_{mlp_name}",
+            "params": params_total,
+            "memory": mem_total,
             "attr": "persistent",
-            "item": item_dict
+            "items": {
+                "qkvo": qkvo,
+                "ffn": mlp
+            }
         }
 
         return mem_rst
 
-    def mem_single_layer_moe_persist():
-        params_total = 0
-        mem_single_layer = 0
-        ffn_name = None
-        item_dict = None
-        if model_config.num_layers_moe != 0:
-            mem_qkvo = mem_qkvo_proj()
-            mem_ffn = mem_moe_persist()
-            params_total = mem_qkvo["param"] + mem_ffn["param"]
-            mem_single_layer = mem_qkvo["#mem"] + mem_ffn["#mem"]
-            ffn_name = mem_ffn["name"]
+    def mem_single_layer_moe():
+        num_layers_moe = config.model_config.num_layers_moe
 
-            item_dict = {
-                "mem_qkvo": mem_qkvo,
-                "mem_ffn": mem_ffn
-            }
+        qkvo = None
+        moe = None
+        params_total = 0
+        mem_total = 0
+        moe_name = None
+        if num_layers_moe != 0:
+            qkvo = mem_qkvo_proj()
+            moe = mem_moe()
+            params_total = qkvo["params"] + moe["params"]
+            mem_total = qkvo["memory"] + moe["memory"]
+            moe_name = moe["name"]
 
         mem_rst = {
-            "name": f"single_layer_{ffn_name}",
-            "param": params_total,
-            "#mem": mem_single_layer,
+            "name": f"single_layer_{moe_name}",
+            "params": params_total,
+            "memory": mem_total,
             "attr": "persistent",
-            "item": item_dict
+            "items": {
+                "qkvo": qkvo,
+                "ffn": moe
+            }
         }
 
         return mem_rst
 
-    mem_single_layer_mlp = mem_single_layer_mlp_persist()
-    mem_single_layer_moe = mem_single_layer_moe_persist()
-    params_total = mem_single_layer_mlp["param"] * model_config.num_layers_mlp + \
-        mem_single_layer_moe["param"] * model_config.num_layers_moe
-    mem_persist = mem_single_layer_mlp["#mem"] * model_config.num_layers_mlp + \
-        mem_single_layer_moe["#mem"] * model_config.num_layers_moe
+    num_layers_mlp = config.model_config.num_layers_mlp
+    num_layers_moe = config.model_config.num_layers_moe
 
-    item_dict = {
-        "single_layer_mlp": mem_single_layer_mlp,
-        "single_layer_moe": mem_single_layer_moe
-    }
+    single_layer_mlp = None
+    single_layer_moe = None
+    params_total = 0
+    mem_total = 0
+    if num_layers_mlp != 0:
+        single_layer_mlp = mem_single_layer_mlp()
+        params_total += single_layer_mlp["params"] * num_layers_mlp
+        mem_total += single_layer_mlp["memory"] * num_layers_mlp
+    if num_layers_moe != 0:
+        single_layer_moe = mem_single_layer_moe()
+        params_total += single_layer_moe["params"] * num_layers_moe
+        mem_total += single_layer_moe["memory"] * num_layers_moe
 
     mem_rst = {
         "name": "mem_persist_weight",
-        "param": params_total,
-        "#mem": mem_persist,
+        "params": params_total,
+        "memory": mem_total,
         "attr": "persistent",
-        "item": item_dict
+        "items": {
+            "single_layer_mlp": single_layer_mlp,
+            "single_layer_moe": single_layer_moe
+        }
     }
 
     return mem_rst
 
 
-def mem_persistent_kvcache(model_config):
-    assert model_config.num_heads_kv % model_config.num_devices == 0, \
-        f"kv heads {model_config.num_heads_kv} need to be divisible by number of devices {model_config.num_devices}"
-    head_dim = model_config.hidden_size // model_config.num_heads_q
-    # persistent memory
-    elements_kv = model_config.batch_size * model_config.num_heads_kv * \
-        model_config.seq_len_kv * head_dim * 2
-    params_total = elements_kv * 2  # 2 for kv
-    params_total /= model_config.num_devices  # assume only TP/PP
-    bytes_total = params_total * model_config.num_bytes
+def mem_persistent_embedding(config):
+    # Todo: add memory projection of embedding
+    params_total = 0
+    mem_total = 0
+
+    mem_rst = {
+        "name": "mem_persist_embedding",
+        "params": params_total,
+        "memory": mem_total,
+        "attr": "persistent",
+        "items": None
+    }
+
+    return mem_rst
+
+
+def mem_persistent_kvcache(config):
+    hidden_size = config.model_config.hidden_size
+    num_heads_q = config.model_config.num_heads_q
+    num_heads_kv = config.model_config.num_heads_kv
+    head_dim = hidden_size // num_heads_q
+    num_bytes = config.hardware_config.num_bytes
+    tp = config.hardware_config.tp
+    batch_size = config.input_config.batch_size
+    seq_len_kv = config.input_config.seq_len_kv
+
+    assert num_heads_kv % tp == 0, \
+        f"kv heads {num_heads_kv} should be divisible by tp size {tp}!"
+
+    params_total = batch_size * num_heads_kv * seq_len_kv * head_dim * 2  # 2 for kv
+    params_total /= tp
+    bytes_total = params_total * num_bytes
 
     mem_rst = {
         "name": "mem_persist_kvcache",
-        "param": params_total,
-        "#mem": bytes_total,
+        "params": params_total,
+        "memory": bytes_total,
         "attr": "persistent",
-        "item": {}
+        "items": None
     }
 
     return mem_rst
 
 
-def mem_activation(model_config):
+def mem_activation(config):
     '''
     def mem_attn_qk():
-        assert model_config.num_heads_q % model_config.num_devices == 0, \
-            f"q heads {model_config.num_heads_q} need to be divisible by tp size {model_config.tp}"
-        # activation memory
-        params_out = model_config.batch_size * model_config.num_heads_q * \
-            model_config.seq_len_q * model_config.seq_len_kv
-        params_total = params_out
-        bytes_total = params_total * model_config.num_bytes
-        bytes_total /= model_config.num_devices # assume only TP/PP
+        num_heads_q = config.model_config.num_heads_q
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+        batch_size = config.input_config.batch_size
+        seq_len_q = config.input_config.seq_len_q
+        seq_len_kv = config.input_config.seq_len_kv
+
+        assert num_heads_q % tp == 0, \
+            f"q heads {num_heads_q} should be divisible by tp size {tp}!"
+
+        params_total = batch_size * num_heads_q * seq_len_q * seq_len_kv
+        params_total /= tp
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
             "name": "q@k_T",
-            "param": params_total,
-            "#mem": bytes_total,
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "activation",
-            "item": {}
+            "items": {}
         }
 
         return mem_rst
     '''
 
     def mem_attn_softmax_standard():
-        assert model_config.num_heads_q % model_config.num_devices == 0, \
-            f"q heads {model_config.num_heads_q} need to be divisible by tp size {model_config.tp}"
-        # activation memory
-        # prefill
-        params_in = model_config.batch_size * model_config.num_heads_q * \
-            model_config.seq_len_q * model_config.seq_len_q
-        params_out = model_config.batch_size * model_config.num_heads_q * \
-            model_config.seq_len_q * model_config.seq_len_q
-        params_total = params_in + params_out
-        params_total /= model_config.tp  # only TP
+        num_heads_q = config.model_config.num_heads_q
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+        batch_size = config.input_config.batch_size
+        seq_len_q = config.input_config.seq_len_q
+        seq_len_kv = config.input_config.seq_len_kv
 
-        bytes_total = params_total * model_config.num_bytes
+        assert num_heads_q % tp == 0, \
+            f"q heads {num_heads_q} should be divisible by tp size {tp}!"
+
+        params_in = batch_size * num_heads_q * seq_len_q * seq_len_kv
+        params_out = batch_size * num_heads_q * seq_len_q * seq_len_kv
+        params_total = params_in + params_out
+        params_total /= tp
+
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
             "name": "softmax",
-            "param": params_total,
-            "#mem": bytes_total,
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "activation",
-            "item": {}
+            "items": {}
         }
 
         return mem_rst
 
     '''
     def mem_attn_scorev():
-        assert model_config.num_heads_q % model_config.num_devices == 0, \
-            f"q heads {model_config.num_heads_q} need to be divisible by tp size {model_config.tp}"
-        # activation memory, same with mem_attn_qk
-        params_in_score = model_config.batch_size * model_config.num_heads_q * \
-            model_config.seq_len_q * model_config.seq_len_kv
-        params_total = params_in_score
-        bytes_total = params_total * model_config.num_bytes
-        bytes_total /= model_config.num_devices # assume only TP/PP
+        num_heads_q = config.model_config.num_heads_q
+        num_bytes = config.hardware_config.num_bytes
+        tp = config.hardware_config.tp
+        batch_size = config.input_config.batch_size
+        seq_len_q = config.input_config.seq_len_q
+        seq_len_kv = config.input_config.seq_len_kv
+
+        assert num_heads_q % tp == 0, \
+            f"q heads {num_heads_q} should be divisible by tp size {tp}!"
+
+        params_total = batch_size * num_heads_q * seq_len_q * seq_len_kv
+        params_total /= tp
+        bytes_total = params_total * num_bytes
 
         mem_rst = {
             "name": "score@v",
-            "param": params_total,
-            "#mem": bytes_total,
+            "params": params_total,
+            "memory": bytes_total,
             "attr": "activation",
-            "item": {}
+            "items": {}
         }
 
         return mem_rst
@@ -293,81 +369,89 @@ def mem_activation(model_config):
 
     def mem_attn_activation():
         attn = mem_attn_softmax_standard()
-        mem_attn = attn["#mem"]
+        mem_attn = attn["memory"]
 
         mem_rst = {
             "name": "attn",
-            "param": attn["param"],
-            "#mem": mem_attn,
+            "params": attn["params"],
+            "memory": mem_attn,
             "attr": "activation",
-            "item": {}
+            "items": {}
         }
 
         return mem_rst
 
-    def mem_mlp_activation():
+    def mem_ffn_activation():
         params_total = 0
         # Todo
         mem_rst = {
-            "name": "mlp",
-            "param": params_total,
-            "#mem": 0,
+            "name": "ffn",
+            "params": params_total,
+            "memory": 0,
             "attr": "activation",
-            "item": {}
+            "items": {}
         }
 
         return mem_rst
 
     attn_activat = mem_attn_activation()
-    mlp_activat = mem_mlp_activation()
+    mlp_activat = mem_ffn_activation()
 
-    params_total = max(attn_activat["param"], mlp_activat["param"])
-    mem_activat = max(attn_activat["#mem"], mlp_activat["#mem"])
+    params_total = max(attn_activat["params"], mlp_activat["params"])
+    mem_activat = max(attn_activat["memory"], mlp_activat["memory"])
 
     mem_rst = {
-        "name": "mem_activation",
-        "param": params_total,
-        "#mem": mem_activat,
+        "name": "activation",
+        "params": params_total,
+        "memory": mem_activat,
         "attr": "activation",
-        "item": {"mem_act_attn": attn_activat, "mem_act_mlp": mlp_activat}
+        "items": {"attn": attn_activat, "ffn": mlp_activat}
     }
     return mem_rst
 
 
-def mem_decoder(model_config):
-    mem_persist_weights = mem_persistent_weights(model_config)
-    mem_persist_kvcache = mem_persistent_kvcache(model_config)
-    mem_activat = mem_activation(model_config)
-    params_total = mem_persist_weights["param"] + \
-        mem_persist_kvcache["param"] + mem_activat["param"]
-    mem_total = mem_persist_weights["#mem"] + mem_activat["#mem"]
-
-    item_dict = {
-        "mem_persist_weights": mem_persist_weights,
-        "mem_persist_kvcache": mem_persist_kvcache,
-        "mem_activat": mem_activat
-    }
+def mem_decoder(config):
+    mem_persist_weights = mem_persistent_weights(config)
+    mem_persist_kvcache = mem_persistent_kvcache(config)
+    mem_activat = mem_activation(config)
+    params_total = mem_persist_weights["params"] + \
+        mem_persist_kvcache["params"] + mem_activat["params"]
+    mem_total = mem_persist_weights["memory"] + mem_activat["memory"]
 
     mem_rst = {
-        "name": "mem_persistent",
-        "param": params_total,
-        "#mem": mem_total,
-        "attr": "persistent",
-        "item": item_dict
+        "name": "decoder",
+        "params": params_total,
+        "memory": mem_total,
+        "attr": "persist_with_activat",
+        "items": {
+            "persist_weights": mem_persist_weights,
+            "persist_kvcache": mem_persist_kvcache,
+            "activation": mem_activat
+        }
     }
 
     # mem_item_list = ["Device", "PP", "TP", "NumDevices", "Layers", "In", "Out", "DType",
     #              "BS", "Weights(GB)", "KVcache(GB)", "Activat(GB)", "Total(GB)", "Fit2Device"]
-    device_gb = model_config.device_mem
+    device_gb = config.hardware_config.hbm_capacity
     gigabytes = 1024 * 1024 * 1024
-    weights_gb = mem_persist_weights["#mem"] / gigabytes
-    kvcache_gb = mem_persist_kvcache["#mem"] / gigabytes
-    activat_gb = mem_activat["#mem"] / gigabytes
-    total_gb = mem_total / gigabytes
+    weights_gb = mem_persist_weights["memory"] / gigabytes
+    kvcache_gb = mem_persist_kvcache["memory"] / gigabytes
+    activat_gb = mem_activat["memory"] / gigabytes
+    total_gb = mem_rst["memory"] / gigabytes
 
-    mem_data = [model_config.device, model_config.pp, model_config.tp, model_config.num_devices,
-                model_config.num_layers, model_config.seq_len_q, model_config.seq_len_kv, model_config.dtype,
-                model_config.batch_size,  round(weights_gb, 2), round(
+    device = config.hardware_config.device
+    type = config.hardware_config.type
+    dtype = config.hardware_config.dtype
+    pp = config.hardware_config.pp
+    tp = config.hardware_config.tp
+    num_devices = config.hardware_config.num_devices
+    num_layers = config.model_config.num_layers
+    seq_len_q = config.input_config.seq_len_q
+    seq_len_kv = config.input_config.seq_len_kv
+    batch_size = config.input_config.batch_size
+
+    mem_data = [f"{device}{type}", pp, tp, num_devices, num_layers, seq_len_q, seq_len_kv, dtype,
+                batch_size,  round(weights_gb, 2), round(
                     kvcache_gb, 2), round(activat_gb, 2),
                 round(total_gb, 2), True if total_gb < device_gb else False]
 
@@ -382,18 +466,23 @@ def print_mem_analysis(memory_dict, batchsize_list):
             print("\n")
 
 
-def print_projected_mem_per_device(memory_dict, batchsize_list, in_out_token_list):
+def print_projected_mem_per_device(model_name, memory_dict, batchsize_list, context_list):
     proj_dict = {}
     for pp, pp_dict in memory_dict.items():
         proj_dict[pp] = {}
         for tp, tp_dict in pp_dict.items():
             proj_dict[pp][tp] = {}
             for dtype, mem_data in tp_dict.items():
-                proj_dict[pp][tp][dtype] = {}
-                for data in mem_data:
-                    proj_dict[pp][tp][dtype][data[5]][data[8]] = [data[-2]]
+                print(
+                    f"Memory projection of [{model_name}] in precision [{dtype}] with PP=[{pp}] TP=[{tp}]\n")
+                proj_dict[pp][tp][dtype] = []
+                for data in mem_data[1:]:
+                    print(data)
+                    proj_dict[pp][tp][dtype].append(
+                        [data[5], data[6], data[8], data[-2]])
                     # proj_dict[pp][tp][dtype][data[8]].append(data[-2])
                 print(proj_dict[pp][tp][dtype])
 
                 # print(tabulate(mem_data))
             print("\n")
+    return proj_dict

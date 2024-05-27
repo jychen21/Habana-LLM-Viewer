@@ -1,74 +1,115 @@
 # https://arxiv.org/pdf/2402.16363
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-from models import *
+import models
 
 
-device_bw_tops = {
-    "Gaudi2H": {"bf16": [2.24e12, 420e12, 22e12],
-                "fp8": [2.24e12, 840e12, 22e12]},
-    "Gaudi2C": {"bf16": [1.9e12, 280e12, 22e12],
-                "fp8": [1.9e12, 560e12, 22e12]},
-    "Gaudi2D": {"bf16": [1.9e12, 143e12, 22e12],
-                "fp8": [1.9e12, 287e12, 22e12]},
-}
-
-type2bytes = {
-    "fp32": 4,
-    "fp16": 2,
-    "bf16": 2,
-    "fp8": 1,
-}
-
-# gigabytes
-device_hbm_memory = {
-    "Gaudi2H": 96,
-    "Gaudi2C": 96,
-    "Gaudi2D": 96,
-}
-
-model_dict = {
-    "Llama2-7B": model_llama2_7b,
-    "Llama2-13B": model_llama2_13b,
-    # "Llama2-70B": model_llama2_70b,
-    "Mixtral-8x7B": model_mixtral_8x7b,
-    "GLaM-1.2T": model_glam_1dot2t,
-    "MoE-1.8T": model_moe_1dot8t,
+'''
+references:
+https://www.intel.com/content/www/us/en/content-details/817486/intel-gaudi-3-ai-accelerator-white-paper.html
+https://habana.ai/wp-content/uploads/2023/10/HL-225B_Datasheet_10_23.pdf
+https://habana.ai/habana-labs-data-documents-and-whitepapers/
+'''
+HardwareParameters = {  # get from whitepaper, for reference only
+    "IntelGaudi2": {"HBM": {"Capacity": 96e9, "Bandwidth": 2.46e12},
+                    "Flops": {
+                        "BF16": {"MME": 432e12, "Vec": 11e12},
+                        "FP8": {"MME": 865e12, "Vec": 11e12}
+    }
+    },
+    "IntelGaudi3": {"HBM": {"Capacity": 128e9, "Bandwidth": 3.7e12},
+                    "Flops": {
+                        "BF16": {"MME": 1835e12, "Vec": 28.7e12},
+                        "FP8": {"MME": 1835e12, "Vec": 28.7e12}
+    }
+    },
 }
 
 
-class Config:
-    def __init__(self, batch_size, seq_len_q, seq_len_kv, hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-                 is_decoding, mlp_with_gate, num_experts, num_layers_mlp, num_layers_moe, dtype, device, pp=1, tp=1,
-                 kvcache_bucket=False):
-        self.batch_size = batch_size
-        self.seq_len_q = seq_len_q
-        self.seq_len_kv = seq_len_kv
+DType2Bytes = {
+    "FP32": 4,
+    "FP16": 2,
+    "BF16": 2,
+    "FP8": 1,
+}
+
+
+DeviceType2Ratio = {
+    "B": [1.00, 0.77],
+    "C": [0.65, 0.60],
+    "D": [0.32, 0.30],
+}
+
+
+ModelDict = {
+    "Llama2-7B": models.model_llama2_7b,
+    "Llama2-13B": models.model_llama2_13b,
+    # "Llama2-70B": models.model_llama2_70b,
+    "Mixtral-8x7B": models.model_mixtral_8x7b,
+    "GLaM-1.2T": models.model_glam_1dot2t,
+    "MoE-1.8T": models.model_moe_1dot8t,
+}
+
+
+class HardwareConfig:
+    def __init__(self, device, type, dtype, pp=1, tp=1):
+        self.device = device
+        self.type = type
+        self.device_ratio = DeviceType2Ratio[self.type]
+        self.dtype = dtype
+        self.num_bytes = DType2Bytes[self.dtype]
+        self.hbm_capacity = HardwareParameters[self.device]["HBM"]["Capacity"]
+        self.hbm_bandwidth = HardwareParameters[self.device]["HBM"]["Bandwidth"] * self.device_ratio[1]
+        self.flops_mme = HardwareParameters[self.device]["Flops"][self.dtype]["MME"] * self.device_ratio[0]
+        self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
+        self.hardware_ai_mme = self.flops_mme / self.hbm_bandwidth
+        self.hardware_ai_vec = self.flops_vec / self.hbm_bandwidth
+        self.hardware_ai_mme_attn = self.hardware_ai_mme
+        self.flops_mme_factor = 128
+        self.pp = pp
+        self.tp = tp
+        self.num_devices = self.pp * self.tp
+
+
+class ModelConfig:
+    def __init__(self, hidden_size, num_heads_q, num_heads_kv,
+                 intermediate_size, mlp_with_gate, num_experts,
+                 num_layers_mlp, num_layers_moe):
         self.hidden_size = hidden_size
         self.num_heads_q = num_heads_q
         self.num_heads_kv = num_heads_kv
         self.intermediate_size = intermediate_size
-        self.is_decoding = is_decoding
         self.mlp_with_gate = mlp_with_gate
         self.num_experts = num_experts
         self.num_layers_mlp = num_layers_mlp
         self.num_layers_moe = num_layers_moe
         self.num_layers = self.num_layers_mlp + self.num_layers_moe
-        self.dtype = dtype
-        self.num_bytes = type2bytes[self.dtype]
-        self.device = device
-        self.bw = device_bw_tops[self.device][self.dtype][0]
-        self.tops = device_bw_tops[self.device][self.dtype][1]
-        self.tops_tpc = device_bw_tops[self.device][self.dtype][2]
-        self.hardware_ai = self.tops / self.bw
-        self.hardware_ai_attn = self.tops / self.bw
+
+
+class InputConfig:
+    def __init__(self, seq_len_q, seq_len_kv, batch_size):
+        self.seq_len_q = seq_len_q
+        self.seq_len_kv = seq_len_kv
+        self.batch_size = batch_size
+
+
+class Config:
+    def __init__(self, device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
+                 intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
+                 num_layers_moe, seq_len_q, seq_len_kv, batch_size, is_decoding,
+                 kvcache_bucket=False):
+        self.hardware_config = HardwareConfig(device, type, dtype, pp, tp)
+        self.model_config = ModelConfig(hidden_size, num_heads_q, num_heads_kv,
+                                        intermediate_size, mlp_with_gate, num_experts,
+                                        num_layers_mlp, num_layers_moe)
+        self.input_config = InputConfig(seq_len_q, seq_len_kv, batch_size)
+
+        bs = self.input_config.batch_size
+        tq = self.input_config.seq_len_q
+        self.hardware_config.flops_mme_factor = 256 if (bs*tq) > 128 else 128
+
+        self.is_decoding = is_decoding
         if self.is_decoding:
-            self.hardware_ai_attn /= 128  # for Gaudi2
-        self.hardware_ai_tpc = self.tops_tpc / self.bw
-        self.mme_tops_factor = 128 if (
-            self.batch_size * self.seq_len_q) <= 128 else 256  # for Gaudi2
-        self.device_mem = device_hbm_memory[self.device]
-        self.pp = pp  # currently just for memory fit analysis
-        self.tp = tp  # currently just for memory fit analysis
-        self.num_devices = self.pp * self.tp  # currently just for memory fit analysis
+            self.hardware_config.hardware_ai_mme_attn = self.input_config.seq_len_q / 128
+
         self.kvcache_bucket = kvcache_bucket
