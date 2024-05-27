@@ -11,17 +11,19 @@ https://habana.ai/wp-content/uploads/2023/10/HL-225B_Datasheet_10_23.pdf
 https://habana.ai/habana-labs-data-documents-and-whitepapers/
 '''
 HardwareParameters = {  # get from whitepaper, for reference only
-    "IntelGaudi2": {"HBM": {"Capacity": 96e9, "Bandwidth": 2.46e12},
-                    "Flops": {
-                        "BF16": {"MME": 432e12, "Vec": 11e12},
-                        "FP8": {"MME": 865e12, "Vec": 11e12}
-    }
+    "IntelGaudi2": {
+        "HBM": {"Capacity": 96e9, "Bandwidth": 2.46e12},
+        "Flops": {
+            "BF16": {"MME": 432e12, "Vec": 11e12},
+            "FP8": {"MME": 865e12, "Vec": 11e12}
+        }
     },
-    "IntelGaudi3": {"HBM": {"Capacity": 128e9, "Bandwidth": 3.7e12},
-                    "Flops": {
-                        "BF16": {"MME": 1835e12, "Vec": 28.7e12},
-                        "FP8": {"MME": 1835e12, "Vec": 28.7e12}
-    }
+    "IntelGaudi3": {
+        "HBM": {"Capacity": 128e9, "Bandwidth": 3.7e12},
+        "Flops": {
+            "BF16": {"MME": 1835e12, "Vec": 28.7e12},
+            "FP8": {"MME": 1835e12, "Vec": 28.7e12}
+        }
     },
 }
 
@@ -59,8 +61,10 @@ class HardwareConfig:
         self.dtype = dtype
         self.num_bytes = DType2Bytes[self.dtype]
         self.hbm_capacity = HardwareParameters[self.device]["HBM"]["Capacity"]
-        self.hbm_bandwidth = HardwareParameters[self.device]["HBM"]["Bandwidth"] * self.device_ratio[1]
-        self.flops_mme = HardwareParameters[self.device]["Flops"][self.dtype]["MME"] * self.device_ratio[0]
+        self.hbm_bandwidth = HardwareParameters[self.device]["HBM"]["Bandwidth"] * \
+            self.device_ratio[1]
+        self.flops_mme = HardwareParameters[self.device]["Flops"][self.dtype]["MME"] * \
+            self.device_ratio[0]
         self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
         self.hardware_ai_mme = self.flops_mme / self.hbm_bandwidth
         self.hardware_ai_vec = self.flops_vec / self.hbm_bandwidth
