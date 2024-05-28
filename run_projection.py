@@ -4,7 +4,7 @@ from compute import *
 from memory import *
 
 
-def compute_analyzer(model_name, device_list, device_type_list, dtype_list, batchsize_list, context_list):
+def compute_analyzer(model_name, device_list, device_type_list, dtype_list, batchsize_list, context_list, to_csv=True):
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
@@ -121,8 +121,8 @@ def compute_analyzer(model_name, device_list, device_type_list, dtype_list, batc
                     layer_decoding_projection)
                 analysis_dict["decode"].append(decoding_layer_analysis)
 
-            print_projection(projection_dict, device, type, model_name, context_list, batchsize_list)
-            print_layer_projection(layer_projection_dict, device, type, model_name, context_list, batchsize_list)
+            print_projection(projection_dict, device, type, model_name, context_list, batchsize_list, to_csv)
+            print_layer_projection(layer_projection_dict, device, type, model_name, context_list, batchsize_list, to_csv)
             # print_analysis(analysis_dict, batchsize_list, model_name)
             # plot_projection(projection_dict, batchsize_list, model_name)
 
