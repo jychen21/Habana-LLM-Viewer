@@ -37,9 +37,9 @@ DType2Bytes = {
 
 
 DeviceType2Ratio = {
-    "B": [1.00, 0.77],
-    "C": [0.65, 0.60],
-    "D": [0.32, 0.30],
+    "B": [1.00, 0.77, 0.14, 0.42, 0.68],
+    "C": [0.65, 0.61, 0.26, 0.67, 0.88],
+    "D": [0.32, 0.30, 0.67, 0.84, 0.94],
 }
 
 
@@ -61,8 +61,8 @@ class HardwareConfig:
         self.dtype = dtype
         self.num_bytes = DType2Bytes[self.dtype]
         self.hbm_capacity = HardwareParameters[self.device]["HBM"]["Capacity"]
-        self.hbm_bandwidth = HardwareParameters[self.device]["HBM"]["Bandwidth"] * \
-            self.device_ratio[1]
+        self.hbm_bandwidth_org = HardwareParameters[self.device]["HBM"]["Bandwidth"]
+        self.hbm_bandwidth = self.hbm_bandwidth_org * self.device_ratio[1]
         self.flops_mme = HardwareParameters[self.device]["Flops"][self.dtype]["MME"] * \
             self.device_ratio[0]
         self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
@@ -70,6 +70,7 @@ class HardwareConfig:
         self.hardware_ai_vec = self.flops_vec / self.hbm_bandwidth
         self.hardware_ai_mme_attn = self.hardware_ai_mme
         self.flops_mme_factor = 128
+        self.flops_mme_factor_attn = self.flops_mme_factor
         self.pp = pp
         self.tp = tp
         self.num_devices = self.pp * self.tp
@@ -116,4 +117,7 @@ class Config:
         if self.is_decoding:
             self.hardware_config.hardware_ai_mme_attn = self.input_config.seq_len_q / 128
 
+        self.bucket_perf_gain = 1
         self.kvcache_bucket = kvcache_bucket
+        if self.kvcache_bucket:
+            self.bucket_perf_gain = 1.3

@@ -1,0 +1,11 @@
+Device,HiddenSize,HeadsQ,HeadsKV,InterSize,Decoding,Experts,Layers,In,Out,DType,BS,KVCacheBucket,Latency(s),Throughput(tokens/sec)
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,1,True,0.05,20.45
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,2,True,0.05,40.56
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,4,True,0.05,79.77
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,8,True,0.05,154.4
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,16,True,0.06,290.14
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,32,True,0.06,517.69
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,64,True,0.08,851.68
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,128,True,0.1,1257.24
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,256,True,0.2,1284.68
+IntelGaudi2D,4096,32,8,14336,True,8,32,128,2048,FP8,512,True,0.4,1290.27

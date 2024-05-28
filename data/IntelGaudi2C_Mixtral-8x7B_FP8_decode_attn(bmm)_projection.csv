@@ -1,0 +1,11 @@
+Device,DType,BS,HeadsQ,HeadsKV,SeqLenQ,HeadDim,Ops(QK+SV)(M),Size(MB),TFLOPs,BW(TB/s),Memory(us),Compute(us),ProjectLatency(us),Bound
+IntelGaudi2C,FP8,1,32,8,1,128,34.0,4.39,4.39,1.5,3.07,8.12,8.12,compute
+IntelGaudi2C,FP8,2,32,8,1,128,68.0,8.78,4.39,1.5,6.14,16.23,16.23,compute
+IntelGaudi2C,FP8,4,32,8,1,128,136.0,17.56,4.39,1.5,12.27,32.47,32.47,compute
+IntelGaudi2C,FP8,8,32,8,1,128,272.0,35.12,4.39,1.5,24.54,64.93,64.93,compute
+IntelGaudi2C,FP8,16,32,8,1,128,544.0,70.25,4.39,1.5,49.09,129.86,129.86,compute
+IntelGaudi2C,FP8,32,32,8,1,128,1088.0,140.5,4.39,1.5,98.18,259.72,259.72,compute
+IntelGaudi2C,FP8,64,32,8,1,128,2176.0,281.0,4.39,1.5,196.35,519.44,519.44,compute
+IntelGaudi2C,FP8,128,32,8,1,128,4352.0,562.0,4.39,1.5,392.71,1038.89,1038.89,compute
+IntelGaudi2C,FP8,256,32,8,1,128,8704.0,1124.0,4.39,1.5,785.42,2077.78,2077.78,compute
+IntelGaudi2C,FP8,512,32,8,1,128,17408.0,2248.0,4.39,1.5,1570.84,4155.56,4155.56,compute

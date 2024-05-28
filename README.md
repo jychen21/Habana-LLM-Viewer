@@ -7,14 +7,15 @@
     ```
 2. run with jupyter notebook: **moe_projection.ipynb**
 
-## Example (Mixtral-8x7B)
+## Example
 
 ### Compute
 #### Llama2-7B
-![Llama2-7B projection](./figure/compute_projection_llama2-7b.png)
+![Llama2-7B 2c projection](./figure/IntelGaudi2C_compute_projection_Llama2-7B.png)
+
 
 #### Mixtral-8x7B
-![Mixtral-8x7B projection](./figure/compute_projection_mixtral-8x7b.png)
+![Mixtral-8x7B 2c projection](./figure/IntelGaudi2C_compute_projection_Mixtral-8x7B.png)
 <!-- ##### Projection Table
 ![Mixtral-8x7B projection table](./figure/mixtral_proj_table.png)
 ##### Bound Analysis

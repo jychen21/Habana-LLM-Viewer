@@ -1,4 +1,6 @@
 # https://arxiv.org/pdf/2402.16363
+import math
+import csv
 from tabulate import tabulate
 import matplotlib.pyplot as plt
 from base import *
@@ -15,7 +17,7 @@ def proj_qkvo_proj(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth
+    bw = config.hardware_config.hbm_bandwidth_org
     flops_mme = config.hardware_config.flops_mme
     flops_mme_factor = config.hardware_config.flops_mme_factor
     hw_ai_mme = config.hardware_config.hardware_ai_mme
@@ -32,9 +34,18 @@ def proj_qkvo_proj(config):
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
     runtime_compute = num_ops / tops
+    if (batch_size * seq_len_q) % flops_mme_factor != 0:
+        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
+        runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    # runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    pipeline = config.hardware_config.device_ratio[2]
+    if (batch_size * seq_len_q) > 128 and (batch_size * seq_len_q) <= 256:
+        pipeline = config.hardware_config.device_ratio[3]
+    elif (batch_size * seq_len_q) > 256:
+        pipeline = config.hardware_config.device_ratio[4]
+    runtime_roofline = runtime_memory + runtime_compute * pipeline
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
@@ -65,7 +76,7 @@ def proj_attn_qk(config):
     seq_len_kv = config.input_config.seq_len_kv
     bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor_attn
     hw_ai_mme_attn = config.hardware_config.hardware_ai_mme_attn
 
     params_in_q = batch_size * num_heads_q * seq_len_q * head_dim
@@ -155,7 +166,7 @@ def proj_attn_scorev(config):
     seq_len_kv = config.input_config.seq_len_kv
     bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor_attn
     hw_ai_mme_attn = config.hardware_config.hardware_ai_mme_attn
 
     params_in_score = batch_size * num_heads_q * seq_len_q * seq_len_kv
@@ -196,7 +207,7 @@ def proj_mlp_up_or_w1(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth
+    bw = config.hardware_config.hbm_bandwidth_org
     flops_mme = config.hardware_config.flops_mme
     flops_mme_factor = config.hardware_config.flops_mme_factor
     hw_ai_mme = config.hardware_config.hardware_ai_mme
@@ -212,9 +223,18 @@ def proj_mlp_up_or_w1(config):
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
     runtime_compute = num_ops / tops
+    if (batch_size * seq_len_q) % flops_mme_factor != 0:
+        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
+        runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    # runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    pipeline = config.hardware_config.device_ratio[2]
+    if (batch_size * seq_len_q) > 128 and (batch_size * seq_len_q) <= 256:
+        pipeline = config.hardware_config.device_ratio[3]
+    elif (batch_size * seq_len_q) > 256:
+        pipeline = config.hardware_config.device_ratio[4]
+    runtime_roofline = runtime_memory + runtime_compute * pipeline
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
@@ -240,7 +260,7 @@ def proj_mlp_down_or_w2(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth
+    bw = config.hardware_config.hbm_bandwidth_org
     flops_mme = config.hardware_config.flops_mme
     flops_mme_factor = config.hardware_config.flops_mme_factor
     hw_ai_mme = config.hardware_config.hardware_ai_mme
@@ -256,9 +276,18 @@ def proj_mlp_down_or_w2(config):
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
     runtime_compute = num_ops / tops
+    if (batch_size * seq_len_q) % flops_mme_factor != 0:
+        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
+        runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    # runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    pipeline = config.hardware_config.device_ratio[2]
+    if (batch_size * seq_len_q) > 128 and (batch_size * seq_len_q) <= 256:
+        pipeline = config.hardware_config.device_ratio[3]
+    elif (batch_size * seq_len_q) > 256:
+        pipeline = config.hardware_config.device_ratio[4]
+    runtime_roofline = runtime_memory + runtime_compute * pipeline
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
@@ -284,7 +313,7 @@ def proj_mlp_gate_or_w3(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth
+    bw = config.hardware_config.hbm_bandwidth_org
     flops_mme = config.hardware_config.flops_mme
     flops_mme_factor = config.hardware_config.flops_mme_factor
     hw_ai_mme = config.hardware_config.hardware_ai_mme
@@ -300,9 +329,18 @@ def proj_mlp_gate_or_w3(config):
     tops = min(flops_mme, flops_mme *
                (batch_size * seq_len_q / flops_mme_factor))
     runtime_compute = num_ops / tops
+    if (batch_size * seq_len_q) % flops_mme_factor != 0:
+        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
+        runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    # runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    pipeline = config.hardware_config.device_ratio[2]
+    if (batch_size * seq_len_q) > 128 and (batch_size * seq_len_q) <= 256:
+        pipeline = config.hardware_config.device_ratio[3]
+    elif (batch_size * seq_len_q) > 256:
+        pipeline = config.hardware_config.device_ratio[4]
+    runtime_roofline = runtime_memory + runtime_compute * pipeline
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
@@ -323,11 +361,16 @@ def proj_mlp_gate_or_w3(config):
 
 
 def proj_attn(config):
+    kvcache_bucket = config.kvcache_bucket
+    bucket_perf_gain = config.bucket_perf_gain
+
     qk = proj_attn_qk(config)
     softmax = proj_attn_softmax(config)
     scorev = proj_attn_scorev(config)
-    runtime_attn = (qk["latency"] + softmax["latency"] +
-                    scorev["latency"])  # *13/2
+    runtime_attn = (qk["latency"] + softmax["latency"] + scorev["latency"])
+
+    if kvcache_bucket:
+        runtime_attn /= bucket_perf_gain
 
     return runtime_attn, (qk, softmax, scorev)
 
@@ -362,47 +405,24 @@ def proj_single_layer(config):
     runtime_moe, ffn_items = proj_moe(config)
     runtime_single_layer = qkvo_proj["latency"] + runtime_attn + runtime_moe
 
-    qk = attn_items[0]
-    softmax = attn_items[1]
-    scorev = attn_items[2]
-    up = ffn_items[0]
-
     hidden_size = config.model_config.hidden_size
     inter_size = config.model_config.intermediate_size
     num_heads_q = config.model_config.num_heads_q
+    num_heads_kv = config.model_config.num_heads_kv
     head_dim = hidden_size // num_heads_q
-    batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
 
     single_layer_items = {
         "hidden_size": hidden_size,
         "inter_size": inter_size,
         "headsq": num_heads_q,
+        "headskv": num_heads_kv,
         "tq": seq_len_q,
         "headdim": head_dim,
         "qkvo": qkvo_proj,
         "attn": attn_items,
         "ffn": ffn_items,
     }
-
-    '''
-    print("\n")
-    print("qkvo ", batch_size, qkvo_proj["memory"], round(qkvo_proj["math_ai"], 2), round(
-        qkvo_proj["tops_roofline"]/1e12, 2), round(qkvo_proj["latency"]*1e6, 2), "us")
-    print("qk ", batch_size, qk["memory"], round(qk["math_ai"], 2), round(
-        qk["tops_roofline"]/1e12, 2), round(qk["latency"]*1e6, 2), "us")
-    print("softmax ", batch_size, softmax["memory"], round(softmax["math_ai"], 2), round(
-        softmax["tops_roofline"]/1e12, 2), round(softmax["latency"]*1e6, 2), "us")
-    print("scorev ", batch_size, scorev["memory"], round(scorev["math_ai"], 2), round(
-        scorev["tops_roofline"]/1e12, 2), round(scorev["latency"]*1e6, 2), "us")
-    print("up/down/gate ", batch_size, up["memory"], round(
-        up["math_ai"], 2), round(up["tops_roofline"]/1e12, 2), round(up["latency"]*1e6, 2), "us")
-    print("qk+sv ", round((qk["latency"]+scorev["latency"])*1e6, 2), "us")
-    print("attn ", round(runtime_attn*1e6, 2), "us")
-    print("mlp ", round(runtime_moe*1e6, 2), "us")
-    print("attn : all ", round(runtime_attn /
-          (qkvo_proj["latency"] + runtime_attn + runtime_moe), 4))
-    '''
 
     return runtime_single_layer, single_layer_items
 
@@ -416,21 +436,67 @@ def proj_decoder(config):
     return runtime_decoder, single_layer_items
 
 
-def print_projection(projection_dict, model_name):
-    proj_prefill, proj_decode = projection_dict["prefill"], projection_dict["decode"]
-    for (_, prefill), (_, decode) in zip(proj_prefill.items(), proj_decode.items()):
-        print(f"{model_name}_prefill".center(130))
-        for data in prefill:
-            print(tabulate(data))
-        print(f"{model_name}_decode".center(130))
-        for data in decode:
-            print(tabulate(data))
-        print("\n\n")
+def print_projection(projection_dict, device, type, model_name, context_list, batchsize_list, to_csv=True, plot=True):
+    proj_item = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts", "Layers",
+                 "In", "Out", "DType", "BS", "KVCacheBucket", "Latency(s)", "Throughput(tokens/sec)"]
+
+    whole_proj_prefill, whole_proj_decode = projection_dict["prefill"], projection_dict["decode"]
+    whole_proj_decode_dict = {}
+    for (dtype, prefill), (_, decode) in zip(whole_proj_prefill.items(), whole_proj_decode.items()):
+        for in_out in range(len(context_list)):
+            proj_prefill_list = [proj_item]
+            proj_decode_list = [proj_item]
+
+            for bs_idx in range(len(batchsize_list)):
+                proj_prefill = prefill[in_out][bs_idx]
+                proj_decode = decode[in_out][bs_idx]
+                bs = batchsize_list[bs_idx]
+
+                config = proj_prefill["config"]
+                hidden_size = config.model_config.hidden_size
+                num_heads_q = config.model_config.num_heads_q
+                num_heads_kv = config.model_config.num_heads_kv
+                intermediate_size = config.model_config.intermediate_size
+                num_experts = config.model_config.num_experts
+                num_layers = config.model_config.num_layers
+                input = context_list[in_out]["in"]
+                output = context_list[in_out]["out"]
+
+                # prefill
+                latency = proj_prefill["latency"]
+                throughput = 1 / latency * bs
+                is_decoding = config.is_decoding
+                kvcache_bucket = config.kvcache_bucket
+                proj_prefill_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
+                                          is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
+                                          round(latency, 2), round(throughput, 2)])
+                # decode
+                config = proj_decode["config"]
+                latency = proj_decode["latency"]
+                throughput = 1 / latency * bs
+                is_decoding = config.is_decoding
+                kvcache_bucket = config.kvcache_bucket
+                proj_decode_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
+                                         is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
+                                         round(latency, 2), round(throughput, 2)])
+            # print(f"{model_name}_prefill_whole_projection".center(130))
+            # print(tabulate(proj_prefill_list))
+            print(f"{model_name}_decode_whole_prokection".center(150))
+            print(tabulate(proj_decode_list))
+            print("\n")
+            if to_csv:
+                with open(f"./data/{device}{type}_{model_name}_decode_whole_projection.csv", "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(proj_decode_list)
+            whole_proj_decode_dict[dtype] = proj_decode_list
+
+    if plot:
+        plot_projection(whole_proj_decode_dict, device, type, batchsize_list, model_name)
 
 
-def print_layer_projection(layer_projection_dict, device, type, model_name, context_list, batchsize_list):
-    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "SeqLenQ", "HeadDim", "Ops(QK+SV)(M)", "Size(MB)",
-                           "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
+def print_layer_projection(layer_projection_dict, device, type, model_name, context_list, batchsize_list, to_csv=True):
+    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "HeadsKV", "SeqLenQ", "HeadDim", "Ops(QK+SV)(M)",
+                           "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
     mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "HiddenSize", "IntermediateSize", "Ops(up)(M)",
                           "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
     megabytes = 1024 * 1024
@@ -456,6 +522,7 @@ def print_layer_projection(layer_projection_dict, device, type, model_name, cont
                 hidden_size = layer_proj_prefill["hidden_size"]
                 inter_size = layer_proj_prefill["inter_size"]
                 headsq = layer_proj_prefill["headsq"]
+                headskv = layer_proj_prefill["headskv"]
                 headdim = layer_proj_prefill["headdim"]
 
                 # attn(bmm) prefill
@@ -474,7 +541,7 @@ def print_layer_projection(layer_projection_dict, device, type, model_name, cont
                 attn_tops = round(qk["tops_roofline"] / tflops, 2)
                 bw = round(qk["bw"] / tbw, 2)
                 attn_bound_wo_softmax = qk["bound"]
-                bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, headsq, tq, headdim,
+                bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, headsq, headskv, tq, headdim,
                                                     attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
                                                     bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
                                                     attn_latency_wo_softmax, attn_bound_wo_softmax])
@@ -494,7 +561,7 @@ def print_layer_projection(layer_projection_dict, device, type, model_name, cont
                 attn_tops = round(qk["tops_roofline"] / tflops, 2)
                 bw = round(qk["bw"] / tbw, 2)
                 attn_bound_wo_softmax = qk["bound"]
-                bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, headsq, tq, headdim,
+                bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, headsq, headskv, tq, headdim,
                                                    attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
                                                    bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
                                                    attn_latency_wo_softmax, attn_bound_wo_softmax])
@@ -526,14 +593,21 @@ def print_layer_projection(layer_projection_dict, device, type, model_name, cont
                 mm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, hidden_size, inter_size, up_ops,
                                                   up_size, up_tops, bw, up_mem_time, up_cmp_time, up_latency, up_bound])
 
-            print(f"{model_name}_prefill_attn(bmm)_projection".center(150))
-            print(tabulate(bmm_layer_proj_prefill_list))
+            # print(f"{model_name}_prefill_attn(bmm)_projection".center(150))
+            # print(tabulate(bmm_layer_proj_prefill_list))
+            # print(f"{model_name}_prefill_ffn_up(mm)_projection".center(150))
+            # print(tabulate(mm_layer_proj_prefill_list))
             print(f"{model_name}_decode_attn(bmm)_projection".center(150))
             print(tabulate(bmm_layer_proj_decode_list), "\n\n")
-            print(f"{model_name}_prefill_ffn_up(mm)_projection".center(150))
-            print(tabulate(mm_layer_proj_prefill_list))
             print(f"{model_name}_decode_ffn_up(mm)_projection".center(150))
             print(tabulate(mm_layer_proj_decode_list))
+            if to_csv:
+                with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_attn(bmm)_projection.csv", "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(bmm_layer_proj_decode_list)
+                with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(mm_layer_proj_decode_list)
 
 
 def print_analysis(analysis_dict, batchsize_list, model_name):
@@ -547,26 +621,24 @@ def print_analysis(analysis_dict, batchsize_list, model_name):
             print("\n\n")
 
 
-def plot_projection(projection_dict, batchsize_list, model_name):
-    for key, projection in projection_dict.items():
-        if key == "decode":
-            plt.figure(figsize=(20, 10))
-            for dtype, proj in projection.items():
-                for data in proj:
-                    proj_list = []
-                    for i in range(0, len(batchsize_list)):
-                        proj_list.append(data[i+1][-1])
-                    device, input, output = data[1][0], data[1][8], data[1][9]
-                    plt.plot(batchsize_list, proj_list,
-                             label=f"{device}_{dtype}_{input}_{output}")
-                    for b, p in zip(batchsize_list, proj_list):
-                        plt.text(b, p, p, ha='right', va='bottom', fontsize=9)
-            plt.xticks(batchsize_list, batchsize_list)
-            plt.tick_params(axis='x', rotation=70)
-            plt.xlabel("batch size")
-            plt.ylabel("tokens / s")
-            plt.title(f"{model_name}_throughput")
-            plt.grid(axis='x')
-            plt.legend()
-            plt.show()
-            plt.savefig("./figure/decode_projection.png")
+def plot_projection(projection_dict, device_name, type, batchsize_list, model_name):
+    plt.figure(figsize=(20, 10))
+    for dtype, proj in projection_dict.items():
+        # print(proj)
+        proj_list = []
+        for data in proj[1:]:
+            proj_list.append(data[-1])
+            device, input, output = data[0], data[8], data[9]
+        plt.plot(batchsize_list, proj_list, label=f"{device}_{dtype}_{input}_{output}")
+        for b, p in zip(batchsize_list, proj_list):
+            plt.text(b, p, p, ha='right', va='bottom', fontsize=9)
+    plt.xticks(batchsize_list, batchsize_list)
+    plt.tick_params(axis='x', rotation=70)
+    plt.xlabel("batch size")
+    plt.ylabel("tokens / s")
+    plt.title(f"{model_name}_throughput")
+    plt.grid(axis='x')
+    plt.legend()
+    # plt.show()
+    plt.savefig(f"./figure/{device_name}{type}_compute_projection_{model_name}.png")
+    plt.clf()
