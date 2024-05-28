@@ -481,7 +481,7 @@ def print_projection(projection_dict, device, type, model_name, context_list, ba
                                          round(latency, 2), round(throughput, 2)])
             # print(f"{model_name}_prefill_whole_projection".center(130))
             # print(tabulate(proj_prefill_list))
-            print(f"{model_name}_decode_whole_prokection".center(150))
+            print(f"{model_name}_decode_whole_projection".center(150))
             print(tabulate(proj_decode_list))
             print("\n")
             if to_csv:
