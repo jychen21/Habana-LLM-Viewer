@@ -1,21 +1,35 @@
 # projection
 
 ## Command
-1. simpily run with **moe_projection.py**
+1. Simpily run with **run_projection.py** and the results will be saved to folder "data" and "figure".
     ```sh
-    python moe_projection.py
+    python run_projection.py
     ```
-2. run with jupyter notebook: **moe_projection.ipynb**
+2. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization.
 
 ## Example
 
 ### Compute
 #### Llama2-7B
+- Overall Projection
 ![Llama2-7B 2c projection](./figure/IntelGaudi2C_compute_projection_Llama2-7B.png)
 
+- Attention (QK + SV) Projection
+![Llama2-7B 2c attn projection](./figure/IntelGaudi2C_attn_projection_Llama2-7B.png)
+
+- FFN (UP) Projection
+![Llama2-7B 2c ffn projection](./figure/IntelGaudi2C_ffn_projection_Llama2-7B.png)
 
 #### Mixtral-8x7B
+- Overall Projection
 ![Mixtral-8x7B 2c projection](./figure/IntelGaudi2C_compute_projection_Mixtral-8x7B.png)
+
+- Attention (QK + SV) Projection
+![Mixtral-8x7B 2c attn projection](./figure/IntelGaudi2C_attn_projection_Mixtral-8x7B.png)
+
+- FFN (UP) Projection
+![Mixtral-8x7B 2c ffn projection](./figure/IntelGaudi2C_ffn_projection_Mixtral-8x7B.png)
+
 <!-- ##### Projection Table
 ![Mixtral-8x7B projection table](./figure/mixtral_proj_table.png)
 ##### Bound Analysis
