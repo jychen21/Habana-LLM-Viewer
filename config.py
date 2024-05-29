@@ -1,6 +1,7 @@
 # https://arxiv.org/pdf/2402.16363
 from tabulate import tabulate
 import matplotlib.pyplot as plt
+import json
 import models
 
 
@@ -47,6 +48,7 @@ ModelDict = {
     "Llama2-7B": models.model_llama2_7b,
     "Llama2-13B": models.model_llama2_13b,
     # "Llama2-70B": models.model_llama2_70b,
+    "Qwen-7B": models.model_qwen_7b,
     "Mixtral-8x7B": models.model_mixtral_8x7b,
     "GLaM-1.2T": models.model_glam_1dot2t,
     "MoE-1.8T": models.model_moe_1dot8t,
@@ -63,6 +65,7 @@ class HardwareConfig:
         self.hbm_capacity = HardwareParameters[self.device]["HBM"]["Capacity"]
         self.hbm_bandwidth_org = HardwareParameters[self.device]["HBM"]["Bandwidth"]
         self.hbm_bandwidth = self.hbm_bandwidth_org * self.device_ratio[1]
+        self.pipeline = self.device_ratio[2]
         self.flops_mme = HardwareParameters[self.device]["Flops"][self.dtype]["MME"] * \
             self.device_ratio[0]
         self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
@@ -111,7 +114,12 @@ class Config:
 
         bs = self.input_config.batch_size
         tq = self.input_config.seq_len_q
-        self.hardware_config.flops_mme_factor = 256 if (bs*tq) > 128 else 128
+        bs_by_tq = bs * tq
+        self.hardware_config.flops_mme_factor = 256 if bs_by_tq > 128 else 128
+        if bs_by_tq > 128 and bs_by_tq <= 256:
+            self.hardware_config.pipeline = self.hardware_config.device_ratio[3]
+        elif bs_by_tq > 256:
+            self.hardware_config.pipeline = self.hardware_config.device_ratio[4]
 
         self.is_decoding = is_decoding
         if self.is_decoding:

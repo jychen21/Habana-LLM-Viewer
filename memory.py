@@ -1,6 +1,6 @@
 from tabulate import tabulate
 import matplotlib.pyplot as plt
-from base import *
+from config import *
 
 
 mem_item_basic = ["H", "H_Inter", "Heads_Q", "HeadsKV", "Experts", "Layers(Mlp)",

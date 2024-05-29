@@ -16,6 +16,12 @@ model_llama2_70b = {
     "num_layers_mlp": 80, "num_layers_moe": 0, "num_experts": 1,
 }
 
+model_qwen_7b = {
+    "model_name": "Qwen-7B", "hidden_size": 4096, "num_heads_q": 32,
+    "num_heads_kv": 32, "intermediate_size": 22016 // 2, "mlp_with_gate": True,
+    "num_layers_mlp": 32, "num_layers_moe": 0, "num_experts": 1,
+}
+
 model_mixtral_8x7b = {
     "model_name": "Mixtral-8x7B", "hidden_size": 4096, "num_heads_q": 32,
     "num_heads_kv": 8, "intermediate_size": 14336, "mlp_with_gate": True,
