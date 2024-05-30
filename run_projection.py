@@ -30,101 +30,17 @@ def compute_analyzer(proj_cfg, to_csv=True, plot=True):
                                 proj_dict[device][type][pp][tp][dtype][input] = {}
 
                                 for output in proj_cfg["context"]["output_list"]:
-                                    proj_dict[device][type][pp][tp][dtype][input][output] = []
+                                    proj_dict[device][type][pp][tp][dtype][input][output] = [
+                                    ]
 
                                     for bs in tqdm(proj_cfg["bs_list"]):
                                         proj_rst = compute.do_projection(model_name, device, type, pp, tp, dtype,
                                                                          input, output, bs, kvcache_bucket)
-                                        proj_dict[device][type][pp][tp][dtype][input][output].append((bs, proj_rst))
+                                        proj_dict[device][type][pp][tp][dtype][input][output].append(
+                                            (bs, proj_rst))
 
-                                        '''
-                                        # prefill
-                                        print(
-                                            f"projection prefill with dtype[{dtype}], device [{device}] with seq_len: {context_list} and bs {batchsize_list}...")
-                                        projection_dict["prefill"][dtype] = []
-                                        layer_projection_dict["prefill"][dtype] = [
-                                        ]
-                                        prefill_projection = []
-                                        prefill_layer_projection = []
-                                        analysis_dict["prefill"][dtype] = []
-                                        prefill_layer_analysis = {}
-                                        for in_out in context_list:
-                                            for bs in tqdm(batchsize_list):
-                                                if bs not in prefill_layer_analysis.keys():
-                                                    prefill_layer_analysis[bs] = [
-                                                    ]
-                                                cfg = config.Config(device=device, type=type, dtype=dtype, pp=1, tp=1, hidden_size=hidden_size,
-                                                                    num_heads_q=num_heads_q, num_heads_kv=num_heads_kv,
-                                                                    intermediate_size=intermediate_size, mlp_with_gate=mlp_with_gate,
-                                                                    num_experts=num_experts, num_layers_mlp=num_layers_mlp,
-                                                                    num_layers_moe=num_layers_moe, seq_len_q=in_out[
-                                                                        "in"],
-                                                                    seq_len_kv=in_out["in"], batch_size=bs,
-                                                                    is_decoding=False, kvcache_bucket=False)
-                                                runtime_decoder, single_layer_items = compute.proj_decoder(
-                                                    cfg)
-                                                prefill_projection.append(
-                                                    {"config": cfg, "latency": runtime_decoder})
-                                                prefill_layer_projection.append(
-                                                    single_layer_items)
-                                                prefill_layer_analysis[bs].append(
-                                                    {"input": in_out["in"], "output": in_out["out"], "layer_items": single_layer_items})
-                                        print("done!\n")
-                                        projection_dict["prefill"][dtype].append(
-                                            prefill_projection)
-                                        layer_projection_dict["prefill"][dtype].append(
-                                            prefill_layer_projection)
-                                        analysis_dict["prefill"][dtype].append(
-                                            prefill_layer_analysis)
-
-                                        # decode
-                                        print(
-                                            f"projection decoding with dtype[{dtype}], device [{device}] with seq_len: {context_list} and bs {batchsize_list}...")
-                                        projection_dict["decode"][dtype] = []
-                                        layer_projection_dict["decode"][dtype] = [
-                                        ]
-                                        decoding_projection = []
-                                        layer_decoding_projection = []
-                                        analysis_dict["decode"][dtype] = []
-                                        decoding_layer_analysis = {}
-                                        for in_out in context_list:
-                                            for bs in tqdm(batchsize_list):
-                                                if bs not in decoding_layer_analysis.keys():
-                                                    decoding_layer_analysis[bs] = [
-                                                    ]
-                                                cfg = config.Config(device=device, type=type, dtype=dtype, pp=1, tp=1, hidden_size=hidden_size,
-                                                                    num_heads_q=num_heads_q, num_heads_kv=num_heads_kv,
-                                                                    intermediate_size=intermediate_size, mlp_with_gate=mlp_with_gate,
-                                                                    num_experts=num_experts, num_layers_mlp=num_layers_mlp,
-                                                                    num_layers_moe=num_layers_moe, seq_len_q=1,
-                                                                    seq_len_kv=in_out["in"]+in_out["out"], batch_size=bs,
-                                                                    is_decoding=True, kvcache_bucket=True)
-                                                runtime_decoder, single_layer_items = compute.proj_decoder(
-                                                    cfg)
-                                                decoding_projection.append(
-                                                    {"config": cfg, "latency": runtime_decoder})
-                                                layer_decoding_projection.append(
-                                                    single_layer_items)
-                                                decoding_layer_analysis[bs].append(
-                                                    {"input": in_out["in"], "output": in_out["out"], "layer_items": single_layer_items})
-                                        print("done!")
-                                        projection_dict["decode"][dtype].append(
-                                            decoding_projection)
-                                        layer_projection_dict["decode"][dtype].append(
-                                            layer_decoding_projection)
-                                        analysis_dict["decode"][dtype].append(
-                                            decoding_layer_analysis)
-
-                                    # compute.print_overall_projection(
-                                    #     projection_dict, device, type, model_name, context_list, batchsize_list, to_csv, plot)
-                                    # compute.print_layer_projection(
-                                    #     layer_projection_dict, device, type, model_name, context_list, batchsize_list, to_csv)
-                                    # compute.print_analysis(
-                                    #     analysis_dict, device, type, model_name, context_list, batchsize_list, to_csv)
-                                    '''
-
-        compute.print_projection(model_name, proj_dict, kvcache_bucket, to_csv, plot)
-        # compute.print_analysis(model_name, proj_dict, to_csv)
+        compute.print_projection(
+            model_name, proj_dict, kvcache_bucket, proj_cfg["bs_list"], to_csv, plot)
 
 
 def memory_analyzer(model_name, device_list, device_type_list, pp_list, tp_list, dtype_list, batchsize_list, context_list):
@@ -230,9 +146,11 @@ if __name__ == "__main__":
         },
         # [1, 2, 4, 8, 16, 32, 64, 128, 129, 160, 192, 256, 257, 512]  # 129
         # [1] + [i for i in range(2, 513, 2)],
-        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512], # [1] + [i for i in range(2, 257, 2)],
+        # [1] + [i for i in range(2, 257, 2)],
+        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
         "optims": {
-            "kvcache_bucket": 128  # None if not enable kvcache_bucket
+            "kvcache_bucket": 256,  # None, 1, or >= 256
+            "flash_attention": False,  # Todo
         }
     }
 
