@@ -123,8 +123,7 @@ def compute_analyzer(proj_cfg, to_csv=True, plot=True):
                                     #     analysis_dict, device, type, model_name, context_list, batchsize_list, to_csv)
                                     '''
 
-        compute.print_overall_projection(model_name, proj_dict, kvcache_bucket, to_csv, plot)
-        # compute.print_layer_projection(model_name, proj_dict, to_csv)
+        compute.print_projection(model_name, proj_dict, kvcache_bucket, to_csv, plot)
         # compute.print_analysis(model_name, proj_dict, to_csv)
 
 
@@ -224,14 +223,14 @@ if __name__ == "__main__":
             "pp_list": [1],
             "tp_list": [1],  # [1, 2, 4, 8, 16]
         },
-        "dtype_list": ["BF16", "FP8"],
+        "dtype_list": ["BF16"],
         "context": {
             "input_list": [128, 512, 1024, 2048],  # 32000
             "output_list": [128, 512],
         },
         # [1, 2, 4, 8, 16, 32, 64, 128, 129, 160, 192, 256, 257, 512]  # 129
         # [1] + [i for i in range(2, 513, 2)],
-        "bs_list": [1, 4, 16, 24, 28, 32, 48, 56, 60, 64, 96, 112, 128, 256, 512], # [1] + [i for i in range(2, 257, 2)],
+        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512], # [1] + [i for i in range(2, 257, 2)],
         "optims": {
             "kvcache_bucket": 128  # None if not enable kvcache_bucket
         }

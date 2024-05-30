@@ -1,4 +1,5 @@
 # https://arxiv.org/pdf/2402.16363
+import os
 import math
 import csv
 from tabulate import tabulate
@@ -385,6 +386,7 @@ def proj_single_layer(config):
     num_heads_kv = config.model_config.num_heads_kv
     head_dim = hidden_size // num_heads_q
     seq_len_q = config.input_config.seq_len_q
+    seq_len_kv = config.input_config.seq_len_kv
 
     single_layer_items = {
         "hidden_size": hidden_size,
@@ -392,6 +394,7 @@ def proj_single_layer(config):
         "headsq": num_heads_q,
         "headskv": num_heads_kv,
         "tq": seq_len_q,
+        "tkv": seq_len_kv,
         "headdim": head_dim,
         "qkvo": qkvo_proj,
         "attn": attn_items,
@@ -446,15 +449,17 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
     return proj_rst
 
 
+def create_data_dir(dir):
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+
+
 def print_overall_projection(model_name, proj_dict, kvcache_bucket, to_csv=True, plot=True):
-    # proj_item = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts", "Layers",
-    #              "In", "Out", "DType", "BS", "KVCacheBucket", "Latency(s)", "Throughput(tokens/sec)"]
     proj_item = ["Model", "Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCacheBucket", "Prefill(ms)",
-                 "DecodeMin(ms)", "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
+                "DecodeMin(ms)", "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
     
     milli_secs = 1e3
 
-    print(f"project model: {model_name}")
     for device, device_proj in proj_dict.items():
         for type, type_proj in device_proj.items():
             proj_data = [proj_item]
@@ -472,276 +477,227 @@ def print_overall_projection(model_name, proj_dict, kvcache_bucket, to_csv=True,
                                     decode_latency_max = round(decode_latency_list[-1] * milli_secs, 2)
                                     decode_latency_avg = round(sum(decode_latency_list)/len(decode_latency_list) * milli_secs, 2)
                                     overall_latency = round(((proj_prefill_step[0] + sum(decode_latency_list)) / \
-                                                             (len(decode_latency_list) + 1)) * milli_secs, 2)
+                                                            (len(decode_latency_list) + 1)) * milli_secs, 2)
                                     throughput = round((1 / overall_latency) * bs * milli_secs, 2)
                                     proj_data.append([model_name, f"{device}{type}", pp, tp, dtype, input, output,
-                                                      bs, kvcache_bucket, prefill_latency, decode_latency_min,
-                                                      decode_latency_max, decode_latency_avg, overall_latency,
-                                                      throughput])
-                                    # print(bs, proj_rst)
+                                                    bs, kvcache_bucket, prefill_latency, decode_latency_min,
+                                                    decode_latency_max, decode_latency_avg, overall_latency,
+                                                    throughput])
                                 proj_data.append([""] * len(proj_item))
+                    # if plot:
+                    #     plot_overall_projection(overall_proj_decode_dict,
+                    #                             device, type, batchsize_list, model_name)
             print(f"{model_name}_{device}{type}_overall_projection".center(150))
             print(tabulate(proj_data))
     
             if to_csv:
-                with open(f"./data/{model_name}_{device}{type}_overall_projection.csv", "w", newline="") as csvfile:
+                model_dir = f"./data/{model_name}"
+                create_data_dir(model_dir)
+                with open(f"{model_dir}/{device}{type}_overall_projection.csv", "w", newline="") as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows(proj_data)
 
-    # overall_proj_prefill, overall_proj_decode = projection_dict[
-    #     "prefill"], projection_dict["decode"]
-    # overall_proj_decode_dict = {}
-    # for (dtype, prefill), (_, decode) in zip(overall_proj_prefill.items(), overall_proj_decode.items()):
-    #     for in_out in range(len(context_list)):
-    #         proj_prefill_list = [proj_item]
-    #         proj_decode_list = [proj_item]
 
-    #         for bs_idx in range(len(batchsize_list)):
-    #             proj_prefill = prefill[in_out][bs_idx]
-    #             proj_decode = decode[in_out][bs_idx]
-    #             bs = batchsize_list[bs_idx]
+def print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to_csv=True, plot=True):
+    proj_item = ["DType", "Input", "Output", "BS", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize",
+                 "WithGate", "Experts", "Layers", "KVCacheBucket", "Prefill(ms)", "DecodeMin(ms)",
+                 "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
+    
+    milli_secs = 1e3
 
-    #             config = proj_prefill["config"]
-    #             hidden_size = config.model_config.hidden_size
-    #             num_heads_q = config.model_config.num_heads_q
-    #             num_heads_kv = config.model_config.num_heads_kv
-    #             intermediate_size = config.model_config.intermediate_size
-    #             num_experts = config.model_config.num_experts
-    #             num_layers = config.model_config.num_layers
-    #             input = context_list[in_out]["in"]
-    #             output = context_list[in_out]["out"]
+    model = ModelDict[model_name]
+    hidden_size = model["hidden_size"]
+    num_heads_q = model["num_heads_q"]
+    num_heads_kv = model["num_heads_kv"]
+    intermediate_size = model["intermediate_size"]
+    mlp_with_gate = model["mlp_with_gate"]
+    num_layers_mlp = model["num_layers_mlp"]
+    num_layers_moe = model["num_layers_moe"]
+    num_layers = num_layers_mlp + num_layers_moe
+    num_experts = model["num_experts"]
 
-    #             # prefill
-    #             latency = proj_prefill["latency"]
-    #             throughput = 1 / latency * bs
-    #             is_decoding = config.is_decoding
-    #             kvcache_bucket = config.kvcache_bucket
-    #             proj_prefill_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-    #                                       is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
-    #                                       round(latency, 2), round(throughput, 2)])
-    #             # decode
-    #             config = proj_decode["config"]
-    #             latency = proj_decode["latency"]
-    #             throughput = 1 / latency * bs
-    #             is_decoding = config.is_decoding
-    #             kvcache_bucket = config.kvcache_bucket
-    #             proj_decode_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-    #                                      is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
-    #                                      round(latency, 2), round(throughput, 2)])
-    #         # print(f"{model_name}_prefill_overall_projection".center(130))
-    #         # print(tabulate(proj_prefill_list))
-    #         print(f"{model_name}_decode_overall_projection".center(150))
-    #         print(tabulate(proj_decode_list))
-    #         print("\n")
-    #         if to_csv:
-    #             with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_overall_projection.csv", "w", newline="") as csvfile:
-    #                 writer = csv.writer(csvfile)
-    #                 writer.writerows(proj_decode_list)
-    #         overall_proj_decode_dict[dtype] = proj_decode_list
-
-    # if plot:
-    #     plot_overall_projection(overall_proj_decode_dict,
-    #                             device, type, batchsize_list, model_name)
+    for device, device_proj in proj_dict.items():
+        for type, type_proj in device_proj.items():
+            for pp, pp_proj in type_proj.items():
+                for tp, tp_proj in pp_proj.items():
+                    proj_data = [proj_item]
+                    for dtype, dtype_proj in tp_proj.items():
+                        for input, input_proj in dtype_proj.items():
+                            for output, output_proj in input_proj.items():
+                                for bs, proj_rst in output_proj:
+                                    proj_prefill_step = proj_rst["prefill"]
+                                    proj_decode_steps = proj_rst["decode"]
+                                    prefill_latency = round(proj_prefill_step[0] * milli_secs, 2)
+                                    decode_latency_list = [step[0] for step in proj_decode_steps]
+                                    decode_latency_min = round(decode_latency_list[0] * milli_secs, 2)
+                                    decode_latency_max = round(decode_latency_list[-1] * milli_secs, 2)
+                                    decode_latency_avg = round(sum(decode_latency_list)/len(decode_latency_list) * milli_secs, 2)
+                                    overall_latency = round(((proj_prefill_step[0] + sum(decode_latency_list)) / \
+                                                            (len(decode_latency_list) + 1)) * milli_secs, 2)
+                                    throughput = round((1 / overall_latency) * bs * milli_secs, 2)
+                                    proj_data.append([dtype, input, output, bs, hidden_size, num_heads_q, num_heads_kv,
+                                                      intermediate_size, mlp_with_gate, num_experts, num_layers, kvcache_bucket,
+                                                      prefill_latency, decode_latency_min, decode_latency_max, decode_latency_avg,
+                                                      overall_latency, throughput])
+                                proj_data.append([""] * len(proj_item))
+                    print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_overall_projection_in_detatil".center(200))
+                    print(tabulate(proj_data))
+                        
+                    if to_csv:
+                        model_dir = f"./data/{model_name}"
+                        create_data_dir(model_dir)
+                        with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_overall_projection_in_detatil.csv", "w", newline="") as csvfile:
+                            writer = csv.writer(csvfile)
+                            writer.writerows(proj_data)
 
 
-# def print_overall_projection(projection_dict, device, type, model_name, context_list, batchsize_list, to_csv=True, plot=True):
-#     proj_item = ["Device", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize", "Decoding", "Experts", "Layers",
-#                  "In", "Out", "DType", "BS", "KVCacheBucket", "Latency(s)", "Throughput(tokens/sec)"]
+def print_layer_projection(model_name, proj_dict, kvcache_bucket, to_csv=True, plot=True):
+    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "HeadsKV", "SeqLenQ", "SeqLenKV", "HeadDim", "Ops(QK+SV)(M)",
+                           "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
+    mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "SeqLenKV", "HiddenSize", "IntermediateSize", "Ops(up)(M)",
+                          "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
 
-#     overall_proj_prefill, overall_proj_decode = projection_dict[
-#         "prefill"], projection_dict["decode"]
-#     overall_proj_decode_dict = {}
-#     for (dtype, prefill), (_, decode) in zip(overall_proj_prefill.items(), overall_proj_decode.items()):
-#         for in_out in range(len(context_list)):
-#             proj_prefill_list = [proj_item]
-#             proj_decode_list = [proj_item]
+    megabytes = 1024 * 1024
+    megaparam = 1024 * 1024
+    microsecs = 1e6
+    tflops = 1e12
+    tbw = 1e12
 
-#             for bs_idx in range(len(batchsize_list)):
-#                 proj_prefill = prefill[in_out][bs_idx]
-#                 proj_decode = decode[in_out][bs_idx]
-#                 bs = batchsize_list[bs_idx]
+    model = ModelDict[model_name]
+    hidden_size = model["hidden_size"]
+    num_heads_q = model["num_heads_q"]
+    headdim = hidden_size // num_heads_q
+    num_heads_kv = model["num_heads_kv"]
+    intermediate_size = model["intermediate_size"]
 
-#                 config = proj_prefill["config"]
-#                 hidden_size = config.model_config.hidden_size
-#                 num_heads_q = config.model_config.num_heads_q
-#                 num_heads_kv = config.model_config.num_heads_kv
-#                 intermediate_size = config.model_config.intermediate_size
-#                 num_experts = config.model_config.num_experts
-#                 num_layers = config.model_config.num_layers
-#                 input = context_list[in_out]["in"]
-#                 output = context_list[in_out]["out"]
+    for device, device_proj in proj_dict.items():
+        for type, type_proj in device_proj.items():
+            for pp, pp_proj in type_proj.items():
+                for tp, tp_proj in pp_proj.items():
+                    bmm_layer_proj_data = [bmm_layer_proj_item]
+                    mm_layer_proj_data = [mm_layer_proj_item]
+                    for dtype, dtype_proj in tp_proj.items():
+                        bmm_layer_proj_prefill_list = [bmm_layer_proj_item]
+                        mm_layer_proj_prefill_list = [mm_layer_proj_item]
+                        bmm_layer_proj_decode_list = [bmm_layer_proj_item]
+                        mm_layer_proj_decode_list = [mm_layer_proj_item]
+                        for input, input_proj in dtype_proj.items():
+                            for output, output_proj in input_proj.items():
+                                for bs, proj_rst in output_proj:
+                                    proj_prefill_step = proj_rst["prefill"]
+                                    proj_decode_steps = proj_rst["decode"]
 
-#                 # prefill
-#                 latency = proj_prefill["latency"]
-#                 throughput = 1 / latency * bs
-#                 is_decoding = config.is_decoding
-#                 kvcache_bucket = config.kvcache_bucket
-#                 proj_prefill_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-#                                           is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
-#                                           round(latency, 2), round(throughput, 2)])
-#                 # decode
-#                 config = proj_decode["config"]
-#                 latency = proj_decode["latency"]
-#                 throughput = 1 / latency * bs
-#                 is_decoding = config.is_decoding
-#                 kvcache_bucket = config.kvcache_bucket
-#                 proj_decode_list.append([f"{device}{type}", hidden_size, num_heads_q, num_heads_kv, intermediate_size,
-#                                          is_decoding, num_experts, num_layers, input, output, dtype, bs, kvcache_bucket,
-#                                          round(latency, 2), round(throughput, 2)])
-#             # print(f"{model_name}_prefill_overall_projection".center(130))
-#             # print(tabulate(proj_prefill_list))
-#             print(f"{model_name}_decode_overall_projection".center(150))
-#             print(tabulate(proj_decode_list))
-#             print("\n")
-#             if to_csv:
-#                 with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_overall_projection.csv", "w", newline="") as csvfile:
-#                     writer = csv.writer(csvfile)
-#                     writer.writerows(proj_decode_list)
-#             overall_proj_decode_dict[dtype] = proj_decode_list
+                                    # prefill
+                                    layer_proj_prefill = proj_prefill_step[1]
+                                    tq = layer_proj_prefill["tq"]
+                                    tkv = layer_proj_prefill["tkv"]
+                                    # attn(bmm)
+                                    qk, softmax, scorev = layer_proj_prefill["attn"]
+                                    attn_ops_wo_softmax = round(
+                                        (qk["operations"] + scorev["operations"]) / megaparam, 2)
+                                    attn_size_wo_softmax = round(
+                                        (qk["size"] + scorev["size"]) / megabytes, 2)
+                                    attn_mem_time_wo_softmax = round(
+                                        (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
+                                    attn_cmp_time_wo_softmax = round(
+                                        (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
+                                    attn_latency_wo_softmax = round(
+                                        (qk["latency"] + scorev["latency"]) * microsecs, 2)
+                                    attn_tops = round(qk["tops_roofline"] / tflops, 2)
+                                    bw = round(qk["bw"] / tbw, 2)
+                                    attn_bound_wo_softmax = qk["bound"]
+                                    bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, num_heads_q, num_heads_kv, tq,
+                                                                        tkv, headdim, attn_ops_wo_softmax, attn_size_wo_softmax,
+                                                                        attn_tops, bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
+                                                                        attn_latency_wo_softmax, attn_bound_wo_softmax])
+                                    # ffn_up(mm)
+                                    up, down, gate = layer_proj_prefill["ffn"]
+                                    up_ops = round(up["operations"] / megaparam, 2)
+                                    up_size = round(up["size"] / megabytes, 2)
+                                    up_mem_time = round(up["mem_time"] * microsecs, 2)
+                                    up_cmp_time = round(up["cmp_time"] * microsecs, 2)
+                                    up_latency = round(up["latency"] * microsecs, 2)
+                                    up_tops = round(up["tops_roofline"] / tflops, 2)
+                                    bw = round(up["bw"] / tbw, 2)
+                                    up_bound = up["bound"]
+                                    mm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, tq, tkv, hidden_size,
+                                                                       intermediate_size, up_ops, up_size, up_tops, bw,
+                                                                       up_mem_time, up_cmp_time, up_latency, up_bound])
 
-#     if plot:
-#         plot_overall_projection(overall_proj_decode_dict,
-#                                 device, type, batchsize_list, model_name)
+                                    # decoding
+                                    for decode_step in proj_decode_steps:
+                                        layer_proj_decode = decode_step[1]
+                                        tq = layer_proj_decode["tq"]
+                                        tkv = layer_proj_prefill["tkv"]
+                                        # attn(bmm)
+                                        qk, softmax, scorev = layer_proj_decode["attn"]
+                                        attn_ops_wo_softmax = round(
+                                            (qk["operations"] + scorev["operations"]) / megaparam, 2)
+                                        attn_size_wo_softmax = round(
+                                            (qk["size"] + scorev["size"]) / megabytes, 2)
+                                        attn_mem_time_wo_softmax = round(
+                                            (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
+                                        attn_cmp_time_wo_softmax = round(
+                                            (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
+                                        attn_latency_wo_softmax = round(
+                                            (qk["latency"] + scorev["latency"]) * microsecs, 2)
+                                        attn_tops = round(qk["tops_roofline"] / tflops, 2)
+                                        bw = round(qk["bw"] / tbw, 2)
+                                        attn_bound_wo_softmax = qk["bound"]
+                                        bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, num_heads_q, num_heads_kv, tq,
+                                                                           tkv, headdim, attn_ops_wo_softmax, attn_size_wo_softmax,
+                                                                           attn_tops, bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
+                                                                           attn_latency_wo_softmax, attn_bound_wo_softmax])
+                                        # ffn_up(mm)
+                                        up, down, gate = layer_proj_decode["ffn"]
+                                        up_ops = round(up["operations"] / megaparam, 2)
+                                        up_size = round(up["size"] / megabytes, 2)
+                                        up_mem_time = round(up["mem_time"] * microsecs, 2)
+                                        up_cmp_time = round(up["cmp_time"] * microsecs, 2)
+                                        up_latency = round(up["latency"] * microsecs, 2)
+                                        up_tops = round(up["tops_roofline"] / tflops, 2)
+                                        bw = round(up["bw"] / tbw, 2)
+                                        up_bound = up["bound"]
+                                        mm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, tkv, hidden_size,
+                                                                          intermediate_size, up_ops, up_size, up_tops, bw,
+                                                                          up_mem_time, up_cmp_time, up_latency, up_bound])
+                                bmm_layer_proj_prefill_list.append([""] * len(bmm_layer_proj_item))
+                                mm_layer_proj_prefill_list.append([""] * len(mm_layer_proj_item))
+                                bmm_layer_proj_decode_list.append([""] * len(bmm_layer_proj_item))
+                                mm_layer_proj_decode_list.append([""] * len(mm_layer_proj_item))
+                        
+                        '''
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_attn_qksv(bmm)_projection".center(200))
+                        print(tabulate(bmm_layer_proj_prefill_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_ffn_up(mm)_projection".center(200))
+                        print(tabulate(mm_layer_proj_prefill_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_qksv(bmm)_projection".center(200))
+                        print(tabulate(bmm_layer_proj_decode_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_ffn_up(mm)_projection".center(200))
+                        print(tabulate(mm_layer_proj_decode_list))
+                        '''
+
+                        if to_csv:
+                            model_dir = f"./data/{model_name}"
+                            create_data_dir(model_dir)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_attn_qksv(bmm)_projection.csv", "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(bmm_layer_proj_prefill_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(mm_layer_proj_prefill_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_attn_qksv(bmm)_projection.csv", "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(bmm_layer_proj_decode_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(mm_layer_proj_decode_list)
 
 
-def plot_overall_projection(projection_dict, device_name, type, batchsize_list, model_name):
-    plt.figure(figsize=(20, 10))
-    for dtype, proj in projection_dict.items():
-        proj_list = []
-        for data in proj[1:]:
-            proj_list.append(data[-1])
-            device, input, output = data[0], data[8], data[9]
-        plt.plot(batchsize_list, proj_list,
-                 label=f"{device}_{dtype}_{input}_{output}")
-        for b, p in zip(batchsize_list, proj_list):
-            plt.text(b, p, p, ha='right', va='bottom', fontsize=9)
-    plt.xticks(batchsize_list, batchsize_list)
-    plt.tick_params(axis='x', rotation=70)
-    plt.xlabel("batch size")
-    plt.ylabel("tokens / s")
-    plt.title(f"{model_name}_throughput")
-    plt.grid(axis='x')
-    plt.legend()
-    plt.show()
-    plt.savefig(
-        f"./figure/{device_name}{type}_compute_projection_{model_name}.png")
-    plt.clf()
-
-
-# def print_layer_projection(model_name, layer_projection_dict, device, type, model_name, context_list, batchsize_list, to_csv=True):
-#     bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "HeadsKV", "SeqLenQ", "HeadDim", "Ops(QK+SV)(M)",
-#                            "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
-#     mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "HiddenSize", "IntermediateSize", "Ops(up)(M)",
-#                           "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
-#     megabytes = 1024 * 1024
-#     megaparam = 1024 * 1024
-#     microsecs = 1e6
-#     tflops = 1e12
-#     tbw = 1e12
-
-#     layer_proj_prefill, layer_proj_decode = layer_projection_dict[
-#         "prefill"], layer_projection_dict["decode"]
-#     for (dtype, layer_proj_dict_prefill), (_, layer_proj_dict_decode) in \
-#             zip(layer_proj_prefill.items(), layer_proj_decode.items()):
-#         for in_out in range(len(context_list)):
-#             bmm_layer_proj_prefill_list = [bmm_layer_proj_item]
-#             bmm_layer_proj_decode_list = [bmm_layer_proj_item]
-#             mm_layer_proj_prefill_list = [mm_layer_proj_item]
-#             mm_layer_proj_decode_list = [mm_layer_proj_item]
-
-#             for bs_idx in range(len(batchsize_list)):
-#                 layer_proj_prefill = layer_proj_dict_prefill[in_out][bs_idx]
-#                 layer_proj_decode = layer_proj_dict_decode[in_out][bs_idx]
-#                 bs = batchsize_list[bs_idx]
-#                 hidden_size = layer_proj_prefill["hidden_size"]
-#                 inter_size = layer_proj_prefill["inter_size"]
-#                 headsq = layer_proj_prefill["headsq"]
-#                 headskv = layer_proj_prefill["headskv"]
-#                 headdim = layer_proj_prefill["headdim"]
-
-#                 # attn(bmm) prefill
-#                 tq = layer_proj_prefill["tq"]
-#                 qk, softmax, scorev = layer_proj_prefill["attn"]
-#                 attn_ops_wo_softmax = round(
-#                     (qk["operations"] + scorev["operations"]) / megaparam, 2)
-#                 attn_size_wo_softmax = round(
-#                     (qk["size"] + scorev["size"]) / megabytes, 2)
-#                 attn_mem_time_wo_softmax = round(
-#                     (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
-#                 attn_cmp_time_wo_softmax = round(
-#                     (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
-#                 attn_latency_wo_softmax = round(
-#                     (qk["latency"] + scorev["latency"]) * microsecs, 2)
-#                 attn_tops = round(qk["tops_roofline"] / tflops, 2)
-#                 bw = round(qk["bw"] / tbw, 2)
-#                 attn_bound_wo_softmax = qk["bound"]
-#                 bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, headsq, headskv, tq, headdim,
-#                                                     attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
-#                                                     bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
-#                                                     attn_latency_wo_softmax, attn_bound_wo_softmax])
-#                 # attn(bmm) decode
-#                 tq = layer_proj_decode["tq"]
-#                 qk, softmax, scorev = layer_proj_decode["attn"]
-#                 attn_ops_wo_softmax = round(
-#                     (qk["operations"] + scorev["operations"]) / megaparam, 2)
-#                 attn_size_wo_softmax = round(
-#                     (qk["size"] + scorev["size"]) / megabytes, 2)
-#                 attn_mem_time_wo_softmax = round(
-#                     (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
-#                 attn_cmp_time_wo_softmax = round(
-#                     (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
-#                 attn_latency_wo_softmax = round(
-#                     (qk["latency"] + scorev["latency"]) * microsecs, 2)
-#                 attn_tops = round(qk["tops_roofline"] / tflops, 2)
-#                 bw = round(qk["bw"] / tbw, 2)
-#                 attn_bound_wo_softmax = qk["bound"]
-#                 bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, headsq, headskv, tq, headdim,
-#                                                    attn_ops_wo_softmax, attn_size_wo_softmax, attn_tops,
-#                                                    bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
-#                                                    attn_latency_wo_softmax, attn_bound_wo_softmax])
-
-#                 # ffn_up(mm) prefill / decode
-#                 up, down, gate = layer_proj_prefill["ffn"]
-#                 tq = layer_proj_prefill["tq"]
-#                 up_ops = round(up["operations"] / megaparam, 2)
-#                 up_size = round(up["size"] / megabytes, 2)
-#                 up_mem_time = round(up["mem_time"] * microsecs, 2)
-#                 up_cmp_time = round(up["cmp_time"] * microsecs, 2)
-#                 up_latency = round(up["latency"] * microsecs, 2)
-#                 up_tops = round(up["tops_roofline"] / tflops, 2)
-#                 bw = round(up["bw"] / tbw, 2)
-#                 up_bound = up["bound"]
-#                 mm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, tq, hidden_size, inter_size, up_ops,
-#                                                    up_size, up_tops, bw, up_mem_time, up_cmp_time, up_latency, up_bound])
-#                 # ffn_up(mm) decode
-#                 up, down, gate = layer_proj_decode["ffn"]
-#                 tq = layer_proj_decode["tq"]
-#                 up_ops = round(up["operations"] / megaparam, 2)
-#                 up_size = round(up["size"] / megabytes, 2)
-#                 up_mem_time = round(up["mem_time"] * microsecs, 2)
-#                 up_cmp_time = round(up["cmp_time"] * microsecs, 2)
-#                 up_latency = round(up["latency"] * microsecs, 2)
-#                 up_tops = round(up["tops_roofline"] / tflops, 2)
-#                 bw = round(up["bw"] / tbw, 2)
-#                 up_bound = up["bound"]
-#                 mm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, hidden_size, inter_size, up_ops,
-#                                                   up_size, up_tops, bw, up_mem_time, up_cmp_time, up_latency, up_bound])
-
-#             # print(f"{model_name}_prefill_attn(bmm)_projection".center(150))
-#             # print(tabulate(bmm_layer_proj_prefill_list))
-#             # print(f"{model_name}_prefill_ffn_up(mm)_projection".center(150))
-#             # print(tabulate(mm_layer_proj_prefill_list))
-#             print(f"{model_name}_decode_attn(bmm)_projection".center(150))
-#             print(tabulate(bmm_layer_proj_decode_list), "\n\n")
-#             print(f"{model_name}_decode_ffn_up(mm)_projection".center(150))
-#             print(tabulate(mm_layer_proj_decode_list))
-#             if to_csv:
-#                 with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_attn(bmm)_projection.csv", "w", newline="") as csvfile:
-#                     writer = csv.writer(csvfile)
-#                     writer.writerows(bmm_layer_proj_decode_list)
-#                 with open(f"./data/{device}{type}_{model_name}_{dtype}_decode_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
-#                     writer = csv.writer(csvfile)
-#                     writer.writerows(mm_layer_proj_decode_list)
+def print_projection(model_name, proj_dict, kvcache_bucket, to_csv=True, plot=True):
+    print_overall_projection(model_name, proj_dict, kvcache_bucket, to_csv, plot)
+    print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to_csv, plot)
+    print_layer_projection(model_name, proj_dict, kvcache_bucket, to_csv, plot)
 
 
 # def print_analysis(model_name, analysis_dict, device, type, model_name, context_list, batchsize_list, to_csv=True):
