@@ -132,7 +132,7 @@ def memory_analyzer(model_name, device_list, device_type_list, pp_list, tp_list,
 if __name__ == "__main__":
     proj_cfg = {
         # ["Llama2-7B", "Llama2-13B", "Mixtral-8x7B", "GLaM-1.2T", "MoE-1.8T"]
-        "model_list": ["Llama2-7B", "Mixtral-8x7B"],
+        "model_list": ["Llama2-7B"],
         "device_list": ["IntelGaudi2"],
         "type_list": ["C"],  # ["C", "D"],
         "parallel": {
@@ -141,21 +141,16 @@ if __name__ == "__main__":
         },
         "dtype_list": ["BF16"],
         "context": {
-            "input_list": [128, 512, 1024, 2048],  # 32000
-            "output_list": [128, 512],
+            "input_list": [512, 1024, 2048],  # 32000
+            "output_list": [512],
         },
-        # [1, 2, 4, 8, 16, 32, 64, 128, 129, 160, 192, 256, 257, 512]  # 129
-        # [1] + [i for i in range(2, 513, 2)],
-        # [1] + [i for i in range(2, 257, 2)],
-        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+        "bs_list": [1] + [i for i in range(2, 257, 2)],
         "optims": {
             "kvcache_bucket": 256,  # None, 1, or >= 256
             "flash_attention": False,  # Todo
         }
     }
 
-    # compute_analyzer(model_name, device_list, type_list, pp_list, tp_list,
-    #                  dtype_list, input_list, output_list, batchsize_list)
     compute_analyzer(proj_cfg)
 
     dtype_list = ["FP8"]  # ["BF16", "FP8"]
