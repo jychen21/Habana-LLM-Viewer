@@ -459,31 +459,32 @@ def mem_decoder(config):
     return mem_data
 
 
-def print_mem_analysis(memory_dict, batchsize_list):
-    for pp, pp_dict in memory_dict.items():
-        for tp, tp_dict in pp_dict.items():
-            for dtype, mem_data in tp_dict.items():
-                print(tabulate(mem_data))
-            print("\n")
+def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None):
+    model = ModelDict[model_name]
+    hidden_size = model["hidden_size"]
+    num_heads_q = model["num_heads_q"]
+    num_heads_kv = model["num_heads_kv"]
+    intermediate_size = model["intermediate_size"]
+    mlp_with_gate = model["mlp_with_gate"]
+    num_layers_mlp = model["num_layers_mlp"]
+    num_layers_moe = model["num_layers_moe"]
+    num_experts = model["num_experts"]
 
+    proj_rst = {}
 
-def print_projected_mem_per_device(model_name, memory_dict, batchsize_list, context_list):
-    proj_dict = {}
-    for pp, pp_dict in memory_dict.items():
-        proj_dict[pp] = {}
-        for tp, tp_dict in pp_dict.items():
-            proj_dict[pp][tp] = {}
-            for dtype, mem_data in tp_dict.items():
-                print(
-                    f"Memory projection of [{model_name}] in precision [{dtype}] with PP=[{pp}] TP=[{tp}]\n")
-                proj_dict[pp][tp][dtype] = []
-                for data in mem_data[1:]:
-                    print(data)
-                    proj_dict[pp][tp][dtype].append(
-                        [data[5], data[6], data[8], data[-2]])
-                    # proj_dict[pp][tp][dtype][data[8]].append(data[-2])
-                print(proj_dict[pp][tp][dtype])
+    seq_len_q = input
+    seq_len_kv = input + output
 
-                # print(tabulate(mem_data))
-            print("\n")
-    return proj_dict
+    cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
+                 intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
+                 num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket)
+    proj_rst["weights"] = mem_persistent_weights(cfg)
+    proj_rst["kvcache"] = mem_persistent_kvcache(cfg)
+    proj_rst["activat"] = mem_activation(cfg)
+    mem_total = 0
+    for _, v in proj_rst.items():
+        mem_total += v["memory"]
+    proj_rst["size"] = "OOM" if mem_total >= cfg.hardware_config.hbm_capacity \
+        else round(mem_total / GigaBytes, 2)
+
+    return proj_rst

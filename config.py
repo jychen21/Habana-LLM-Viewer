@@ -17,7 +17,7 @@ ModelDict = {
 
     # MoE
     "Mixtral-8x7B": models.model_mixtral_8x7b,
-    # "GLaM-1.2T": models.model_glam_1dot2t,
+    "GLaM-1.2T": models.model_glam_1dot2t,
     # "MoE-1.8T": models.model_moe_1dot8t,
 
     # Falcon
@@ -59,6 +59,15 @@ DType2Bytes = {
     "BF16": 2,
     "FP8": 1,
 }
+
+
+GigaBytes = 1024 * 1024 * 1024
+MegaBytes = 1024 * 1024
+GigaParam = 1024 * 1024 * 1024
+MegaParam = 1024 * 1024
+TFLOPS = 1e12
+MicroSecs = 1e6
+T_BW = 1e12
 
 
 DeviceType2Ratio = {
