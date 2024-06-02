@@ -1,4 +1,9 @@
+# https://www.intel.com/content/www/us/en/content-details/817486/intel-gaudi-3-ai-accelerator-white-paper.html
+# https://habana.ai/wp-content/uploads/2023/10/HL-225B_Datasheet_10_23.pdf
+# https://habana.ai/habana-labs-data-documents-and-whitepapers/
 # https://arxiv.org/pdf/2402.16363
+
+
 import os
 import math
 import csv
@@ -12,9 +17,10 @@ def proj_qkvo_proj(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth_org
+    bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor[-1]
+    num_rounds = config.hardware_config.num_rounds
     pipeline = config.hardware_config.pipeline
     hw_ai_mme = config.hardware_config.hardware_ai_mme
 
@@ -22,17 +28,14 @@ def proj_qkvo_proj(config):
     params_in_weight = hidden_size * hidden_size
     params_out = batch_size * seq_len_q * hidden_size
     params_total = params_in_input + params_in_weight + params_out
-    params_total *= 4  # 4 for qkvo
+    params_total *= 4
     bytes_total = params_total * num_bytes
     runtime_memory = bytes_total / bw
 
-    num_ops = batch_size * seq_len_q * hidden_size * hidden_size * 2 * 4  # 4 for qkvo
-    tops = min(flops_mme, flops_mme *
-               (batch_size * seq_len_q / flops_mme_factor))
+    num_ops = batch_size * seq_len_q * hidden_size * hidden_size * 2 * 4
+    tops = min(flops_mme, flops_mme_factor * batch_size * seq_len_q * 1e12)
     runtime_compute = num_ops / tops
-    if (batch_size * seq_len_q) % flops_mme_factor != 0:
-        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
-        runtime_compute *= num_rounds
+    runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory + runtime_compute * pipeline
@@ -66,8 +69,8 @@ def proj_attn_qk(config):
     seq_len_kv = config.input_config.seq_len_kv
     bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor_attn
-    hw_ai_mme_attn = config.hardware_config.hardware_ai_mme_attn
+    flops_mme_factor = config.hardware_config.flops_mme_factor[0]
+    hw_ai_mme = config.hardware_config.hardware_ai_mme
 
     params_in_q = batch_size * num_heads_q * seq_len_q * head_dim
     params_in_k = batch_size * num_heads_kv * seq_len_kv * head_dim
@@ -77,7 +80,8 @@ def proj_attn_qk(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
-    tops = min(flops_mme, flops_mme * (seq_len_q / flops_mme_factor))
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
+               * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
     runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
@@ -88,7 +92,7 @@ def proj_attn_qk(config):
         "name": "q@k_T",
         "operations": num_ops,
         "size": bytes_total,
-        "hw_ai": hw_ai_mme_attn,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
         "bw": bw,
@@ -120,7 +124,7 @@ def proj_attn_softmax(config):
 
     # ops(max) + ops(x-max) + ops(exp(x-max)) + ops(sum(exp(x-max))) + ops(x/sum(exp(x-max)))
     num_ops = batch_size * num_heads_q * seq_len_q * \
-        seq_len_kv * 5  # 5 for traversal times
+        seq_len_kv * 5
     runtime_compute = num_ops / flops_vec
 
     runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -156,8 +160,8 @@ def proj_attn_scorev(config):
     seq_len_kv = config.input_config.seq_len_kv
     bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor_attn
-    hw_ai_mme_attn = config.hardware_config.hardware_ai_mme_attn
+    flops_mme_factor = config.hardware_config.flops_mme_factor[1]
+    hw_ai_mme = config.hardware_config.hardware_ai_mme
 
     params_in_score = batch_size * num_heads_q * seq_len_q * seq_len_kv
     params_in_v = batch_size * num_heads_kv * seq_len_kv * head_dim
@@ -167,7 +171,8 @@ def proj_attn_scorev(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
-    tops = min(flops_mme, flops_mme * (seq_len_q / flops_mme_factor))
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
+               * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
     runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
@@ -178,7 +183,7 @@ def proj_attn_scorev(config):
         "name": "score@v",
         "operations": num_ops,
         "size": bytes_total,
-        "hw_ai": hw_ai_mme_attn,
+        "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
         "tops_roofline": tops,
         "bw": bw,
@@ -197,9 +202,10 @@ def proj_mlp_up_or_w1(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth_org
+    bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor[-1]
+    num_rounds = config.hardware_config.num_rounds
     pipeline = config.hardware_config.pipeline
     hw_ai_mme = config.hardware_config.hardware_ai_mme
 
@@ -211,12 +217,10 @@ def proj_mlp_up_or_w1(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * seq_len_q * hidden_size * intermediate_size * 2
-    tops = min(flops_mme, flops_mme *
-               (batch_size * seq_len_q / flops_mme_factor))
+    tops = min(flops_mme, flops_mme_factor * batch_size * seq_len_q * 1e12)
+
     runtime_compute = num_ops / tops
-    if (batch_size * seq_len_q) % flops_mme_factor != 0:
-        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
-        runtime_compute *= num_rounds
+    runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory + runtime_compute * pipeline
@@ -245,9 +249,10 @@ def proj_mlp_down_or_w2(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth_org
+    bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor[-1]
+    num_rounds = config.hardware_config.num_rounds
     pipeline = config.hardware_config.pipeline
     hw_ai_mme = config.hardware_config.hardware_ai_mme
 
@@ -259,12 +264,9 @@ def proj_mlp_down_or_w2(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * seq_len_q * intermediate_size * hidden_size * 2
-    tops = min(flops_mme, flops_mme *
-               (batch_size * seq_len_q / flops_mme_factor))
+    tops = min(flops_mme, flops_mme_factor * batch_size * seq_len_q * 1e12)
     runtime_compute = num_ops / tops
-    if (batch_size * seq_len_q) % flops_mme_factor != 0:
-        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
-        runtime_compute *= num_rounds
+    runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory + runtime_compute * pipeline
@@ -293,9 +295,11 @@ def proj_mlp_gate_or_w3(config):
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
-    bw = config.hardware_config.hbm_bandwidth_org
+    bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
-    flops_mme_factor = config.hardware_config.flops_mme_factor
+    flops_mme_factor = config.hardware_config.flops_mme_factor[-1]
+    # import pdb;pdb.set_trace()
+    num_rounds = config.hardware_config.num_rounds
     pipeline = config.hardware_config.pipeline
     hw_ai_mme = config.hardware_config.hardware_ai_mme
 
@@ -307,12 +311,9 @@ def proj_mlp_gate_or_w3(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * seq_len_q * hidden_size * intermediate_size * 2
-    tops = min(flops_mme, flops_mme *
-               (batch_size * seq_len_q / flops_mme_factor))
+    tops = min(flops_mme, flops_mme_factor * batch_size * seq_len_q * 1e12)
     runtime_compute = num_ops / tops
-    if (batch_size * seq_len_q) % flops_mme_factor != 0:
-        num_rounds = math.ceil(batch_size * seq_len_q / flops_mme_factor)
-        runtime_compute *= num_rounds
+    runtime_compute *= num_rounds
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory + runtime_compute * pipeline
@@ -336,18 +337,12 @@ def proj_mlp_gate_or_w3(config):
 
 
 def proj_attn(config):
-    kvcache_bucket = config.kvcache_bucket
-    bucket_perf_gain = config.bucket_perf_gain
-
     qk = proj_attn_qk(config)
     softmax = proj_attn_softmax(config)
-    scorev = proj_attn_scorev(config)
-    runtime_attn = (qk["latency"] + softmax["latency"] + scorev["latency"])
+    sv = proj_attn_scorev(config)
+    runtime_attn = (qk["latency"] + softmax["latency"] + sv["latency"])
 
-    if kvcache_bucket:
-        runtime_attn /= bucket_perf_gain
-
-    return runtime_attn, (qk, softmax, scorev)
+    return runtime_attn, (qk, softmax, sv)
 
 
 def proj_mlp(config):
@@ -432,7 +427,7 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
             seq_len_q = seq_len_kv = input
             cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                         num_layers_moe, seq_len_q, seq_len_kv, bs, is_decoding=False)
+                         num_layers_moe, seq_len_q, seq_len_kv, bs, None)
             proj_rst["prefill"] = proj_decoder(cfg)
         else:  # decoding
             seq_len_q = 1
@@ -442,7 +437,7 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
                     math.ceil(step / kvcache_bucket) * kvcache_bucket
             cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                         num_layers_moe, seq_len_q, seq_len_kv, bs, is_decoding=True)
+                         num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket)
             proj_decoding_steps.append(proj_decoder(cfg))
 
     proj_rst["decode"] = proj_decoding_steps
@@ -604,9 +599,9 @@ def print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to
 
 
 def print_layer_projection(model_name, proj_dict, to_csv=True):
-    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "HeadsKV", "SeqLenQ", "SeqLenKV", "HeadDim", "Ops(QK+SV)(M)",
+    bmm_layer_proj_item = ["Device", "DType", "BS", "HeadsQ", "HeadsKV", "SeqLenQ", "SeqLenKV", "HeadDim", "Ops(M)",
                            "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
-    mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "SeqLenKV", "HiddenSize", "IntermediateSize", "Ops(up)(M)",
+    mm_layer_proj_item = ["Device", "DType", "BS", "SeqLenQ", "SeqLenKV", "HiddenSize", "IntermediateSize", "Ops(M)",
                           "Size(MB)", "TFLOPs", "BW(TB/s)", "Memory(us)", "Compute(us)", "ProjectLatency(us)", "Bound"]
 
     megabytes = 1024 * 1024
@@ -627,10 +622,12 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
             for pp, pp_proj in type_proj.items():
                 for tp, tp_proj in pp_proj.items():
                     for dtype, dtype_proj in tp_proj.items():
-                        bmm_layer_proj_prefill_list = [bmm_layer_proj_item]
-                        mm_layer_proj_prefill_list = [mm_layer_proj_item]
-                        bmm_layer_proj_decode_list = [bmm_layer_proj_item]
-                        mm_layer_proj_decode_list = [mm_layer_proj_item]
+                        qk_layer_proj_prefill_list = [bmm_layer_proj_item]
+                        sv_layer_proj_prefill_list = [bmm_layer_proj_item]
+                        up_layer_proj_prefill_list = [mm_layer_proj_item]
+                        qk_layer_proj_decode_list = [bmm_layer_proj_item]
+                        sv_layer_proj_decode_list = [bmm_layer_proj_item]
+                        up_layer_proj_decode_list = [mm_layer_proj_item]
                         for input, input_proj in dtype_proj.items():
                             for output, output_proj in input_proj.items():
                                 for bs, proj_rst in output_proj:
@@ -641,26 +638,47 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
                                     layer_proj_prefill = proj_prefill_step[1]
                                     tq = layer_proj_prefill["tq"]
                                     tkv = layer_proj_prefill["tkv"]
-                                    # attn(bmm)
-                                    qk, softmax, scorev = layer_proj_prefill["attn"]
-                                    attn_ops_wo_softmax = round(
-                                        (qk["operations"] + scorev["operations"]) / megaparam, 2)
-                                    attn_size_wo_softmax = round(
-                                        (qk["size"] + scorev["size"]) / megabytes, 2)
-                                    attn_mem_time_wo_softmax = round(
-                                        (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
-                                    attn_cmp_time_wo_softmax = round(
-                                        (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
-                                    attn_latency_wo_softmax = round(
-                                        (qk["latency"] + scorev["latency"]) * microsecs, 2)
-                                    attn_tops = round(
+                                    # attn_qk(bmm)
+                                    qk, softmax, sv = layer_proj_prefill["attn"]
+                                    qk_ops = round(
+                                        qk["operations"] / megaparam, 2)
+                                    qk_size = round(qk["size"] / megabytes, 2)
+                                    qk_mem_time = round(
+                                        qk["mem_time"] * microsecs, 2)
+                                    qk_cmp_time = round(
+                                        qk["cmp_time"] * microsecs, 2)
+                                    qk_latency = round(
+                                        qk["latency"] * microsecs, 2)
+                                    qk_tops = round(
                                         qk["tops_roofline"] / tflops, 2)
-                                    bw = round(qk["bw"] / tbw, 2)
-                                    attn_bound_wo_softmax = qk["bound"]
-                                    bmm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, num_heads_q, num_heads_kv, tq,
-                                                                        tkv, headdim, attn_ops_wo_softmax, attn_size_wo_softmax,
-                                                                        attn_tops, bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
-                                                                        attn_latency_wo_softmax, attn_bound_wo_softmax])
+                                    qk_bw = round(qk["bw"] / tbw, 2)
+                                    qk_bound = qk["bound"]
+                                    qk_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs,
+                                                                       num_heads_q, num_heads_kv, tq,
+                                                                       tkv, headdim, qk_ops, qk_size,
+                                                                       qk_tops, qk_bw, qk_mem_time,
+                                                                       qk_cmp_time, qk_latency,
+                                                                       qk_bound])
+                                    # attn_sv(bmm)
+                                    sv_ops = round(
+                                        sv["operations"] / megaparam, 2)
+                                    sv_size = round(sv["size"] / megabytes, 2)
+                                    sv_mem_time = round(
+                                        sv["mem_time"] * microsecs, 2)
+                                    sv_cmp_time = round(
+                                        sv["cmp_time"] * microsecs, 2)
+                                    sv_latency = round(
+                                        sv["latency"] * microsecs, 2)
+                                    sv_tops = round(
+                                        sv["tops_roofline"] / tflops, 2)
+                                    sv_bw = round(sv["bw"] / tbw, 2)
+                                    sv_bound = sv["bound"]
+                                    sv_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs,
+                                                                       num_heads_q, num_heads_kv, tq,
+                                                                       tkv, headdim, sv_ops, sv_size,
+                                                                       sv_tops, sv_bw, sv_mem_time,
+                                                                       sv_cmp_time, sv_latency,
+                                                                       sv_bound])
                                     # ffn_up(mm)
                                     up, down, gate = layer_proj_prefill["ffn"]
                                     up_ops = round(
@@ -674,37 +692,62 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
                                         up["latency"] * microsecs, 2)
                                     up_tops = round(
                                         up["tops_roofline"] / tflops, 2)
-                                    bw = round(up["bw"] / tbw, 2)
+                                    up_bw = round(up["bw"] / tbw, 2)
                                     up_bound = up["bound"]
-                                    mm_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, tq, tkv, hidden_size,
-                                                                       intermediate_size, up_ops, up_size, up_tops, bw,
-                                                                       up_mem_time, up_cmp_time, up_latency, up_bound])
+                                    up_layer_proj_prefill_list.append([f"{device}{type}", dtype, bs, tq, tkv,
+                                                                       hidden_size, intermediate_size, up_ops,
+                                                                       up_size, up_tops, up_bw, up_mem_time,
+                                                                       up_cmp_time, up_latency, up_bound])
 
                                     # decoding
                                     for decode_step in proj_decode_steps:
                                         layer_proj_decode = decode_step[1]
                                         tq = layer_proj_decode["tq"]
-                                        tkv = layer_proj_prefill["tkv"]
-                                        # attn(bmm)
-                                        qk, softmax, scorev = layer_proj_decode["attn"]
-                                        attn_ops_wo_softmax = round(
-                                            (qk["operations"] + scorev["operations"]) / megaparam, 2)
-                                        attn_size_wo_softmax = round(
-                                            (qk["size"] + scorev["size"]) / megabytes, 2)
-                                        attn_mem_time_wo_softmax = round(
-                                            (qk["mem_time"] + scorev["mem_time"]) * microsecs, 2)
-                                        attn_cmp_time_wo_softmax = round(
-                                            (qk["cmp_time"] + scorev["cmp_time"]) * microsecs, 2)
-                                        attn_latency_wo_softmax = round(
-                                            (qk["latency"] + scorev["latency"]) * microsecs, 2)
-                                        attn_tops = round(
+                                        tkv = layer_proj_decode["tkv"]
+                                        # attn_qk(bmm)
+                                        qk, softmax, sv = layer_proj_decode["attn"]
+                                        qk_ops = round(
+                                            qk["operations"] / megaparam, 2)
+                                        qk_size = round(
+                                            qk["size"] / megabytes, 2)
+                                        qk_mem_time = round(
+                                            qk["mem_time"] * microsecs, 2)
+                                        qk_cmp_time = round(
+                                            qk["cmp_time"] * microsecs, 2)
+                                        qk_latency = round(
+                                            qk["latency"] * microsecs, 2)
+                                        qk_tops = round(
                                             qk["tops_roofline"] / tflops, 2)
-                                        bw = round(qk["bw"] / tbw, 2)
-                                        attn_bound_wo_softmax = qk["bound"]
-                                        bmm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, num_heads_q, num_heads_kv, tq,
-                                                                           tkv, headdim, attn_ops_wo_softmax, attn_size_wo_softmax,
-                                                                           attn_tops, bw, attn_mem_time_wo_softmax, attn_cmp_time_wo_softmax,
-                                                                           attn_latency_wo_softmax, attn_bound_wo_softmax])
+                                        qk_bw = round(qk["bw"] / tbw, 2)
+                                        qk_bound = qk["bound"]
+                                        qk_layer_proj_decode_list.append([f"{device}{type}", dtype, bs,
+                                                                          num_heads_q, num_heads_kv, tq,
+                                                                          tkv, headdim, qk_ops, qk_size,
+                                                                          qk_tops, qk_bw, qk_mem_time,
+                                                                          qk_cmp_time, qk_latency,
+                                                                          qk_bound])
+                                        # attn_sv(bmm)
+                                        sv_ops = round(
+                                            sv["operations"] / megaparam, 2)
+                                        sv_size = round(
+                                            sv["size"] / megabytes, 2)
+                                        sv_mem_time = round(
+                                            sv["mem_time"] * microsecs, 2)
+                                        sv_cmp_time = round(
+                                            sv["cmp_time"] * microsecs, 2)
+                                        sv_latency = round(
+                                            sv["latency"] * microsecs, 2)
+                                        sv_tops = round(
+                                            sv["tops_roofline"] / tflops, 2)
+                                        sv_bw = round(sv["bw"] / tbw, 2)
+                                        sv_bound = sv["bound"]
+                                        sv_layer_proj_decode_list.append([f"{device}{type}", dtype, bs,
+                                                                          num_heads_q, num_heads_kv, tq,
+                                                                          tkv, headdim, sv_ops, sv_size,
+                                                                          sv_tops, sv_bw, sv_mem_time,
+                                                                          sv_cmp_time, sv_latency,
+                                                                          sv_bound])
+                                        # import pdb;pdb.set_trace()
                                         # ffn_up(mm)
                                         up, down, gate = layer_proj_decode["ffn"]
                                         up_ops = round(
@@ -719,46 +762,68 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
                                             up["latency"] * microsecs, 2)
                                         up_tops = round(
                                             up["tops_roofline"] / tflops, 2)
-                                        bw = round(up["bw"] / tbw, 2)
+                                        up_bw = round(up["bw"] / tbw, 2)
                                         up_bound = up["bound"]
-                                        mm_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, tkv, hidden_size,
-                                                                          intermediate_size, up_ops, up_size, up_tops, bw,
-                                                                          up_mem_time, up_cmp_time, up_latency, up_bound])
-                                bmm_layer_proj_prefill_list.append(
+                                        up_layer_proj_decode_list.append([f"{device}{type}", dtype, bs, tq, tkv,
+                                                                          hidden_size, intermediate_size, up_ops,
+                                                                          up_size, up_tops, up_bw, up_mem_time,
+                                                                          up_cmp_time, up_latency, up_bound])
+                                        break
+                                qk_layer_proj_prefill_list.append(
                                     [""] * len(bmm_layer_proj_item))
-                                mm_layer_proj_prefill_list.append(
+                                sv_layer_proj_prefill_list.append(
+                                    [""] * len(bmm_layer_proj_item))
+                                up_layer_proj_prefill_list.append(
                                     [""] * len(mm_layer_proj_item))
-                                bmm_layer_proj_decode_list.append(
+                                qk_layer_proj_decode_list.append(
                                     [""] * len(bmm_layer_proj_item))
-                                mm_layer_proj_decode_list.append(
+                                sv_layer_proj_decode_list.append(
+                                    [""] * len(bmm_layer_proj_item))
+                                up_layer_proj_decode_list.append(
                                     [""] * len(mm_layer_proj_item))
 
                         '''
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_attn_qksv(bmm)_projection".center(200))
-                        print(tabulate(bmm_layer_proj_prefill_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_ffn_up(mm)_projection".center(200))
-                        print(tabulate(mm_layer_proj_prefill_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_qksv(bmm)_projection".center(200))
-                        print(tabulate(bmm_layer_proj_decode_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_ffn_up(mm)_projection".center(200))
-                        print(tabulate(mm_layer_proj_decode_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_attn_qk_projection".center(200))
+                        print(tabulate(qk_layer_proj_prefill_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_attn_sv_projection".center(200))
+                        print(tabulate(sv_layer_proj_prefill_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_ffn_up_projection".center(200))
+                        print(tabulate(up_layer_proj_prefill_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_qk_projection".center(200))
+                        print(tabulate(qk_layer_proj_decode_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_sv_projection".center(200))
+                        print(tabulate(sv_layer_proj_decode_list))
+                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_ffn_up_projection".center(200))
+                        print(tabulate(up_layer_proj_decode_list))
                         '''
 
                         if to_csv:
                             model_dir = f"./data/{model_name}"
                             create_data_dir(model_dir)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_attn_qksv(bmm)_projection.csv", "w", newline="") as csvfile:
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_attn_qk_projection.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
-                                writer.writerows(bmm_layer_proj_prefill_list)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
+                                writer.writerows(qk_layer_proj_prefill_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_attn_sv_projection.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
-                                writer.writerows(mm_layer_proj_prefill_list)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_attn_qksv(bmm)_projection.csv", "w", newline="") as csvfile:
+                                writer.writerows(sv_layer_proj_prefill_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_ffn_up_projection.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
-                                writer.writerows(bmm_layer_proj_decode_list)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_ffn_up(mm)_projection.csv", "w", newline="") as csvfile:
+                                writer.writerows(up_layer_proj_prefill_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_attn_qk_projection.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
-                                writer.writerows(mm_layer_proj_decode_list)
+                                writer.writerows(qk_layer_proj_decode_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_attn_sv_projection.csv",
+                                      "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(sv_layer_proj_decode_list)
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_ffn_up_projection.csv",
+                                      "w", newline="") as csvfile:
+                                writer = csv.writer(csvfile)
+                                writer.writerows(up_layer_proj_decode_list)
 
 
 def print_layer_analysis(model_name, proj_dict, to_csv=True):
@@ -786,7 +851,7 @@ def print_layer_analysis(model_name, proj_dict, to_csv=True):
                                     layer_proj_prefill = proj_prefill_step[1]
                                     tq = layer_proj_prefill["tq"]
                                     tkv = layer_proj_prefill["tkv"]
-                                    # qkvo / qk, softmax, scorev / up, down, gate
+                                    # qkvo / qk, softmax, sv / up, down, gate
                                     for mod_name in ["qkvo", "attn", "ffn"]:
                                         module = layer_proj_prefill[mod_name]
                                         if isinstance(module, dict):
@@ -828,7 +893,7 @@ def print_layer_analysis(model_name, proj_dict, to_csv=True):
                                         layer_proj_decode = decode_step[1]
                                         tq = layer_proj_decode["tq"]
                                         tkv = layer_proj_prefill["tkv"]
-                                        # qkvo / qk, softmax, scorev / up, down, gate
+                                        # qkvo / qk, softmax, sv / up, down, gate
                                         for mod_name in ["qkvo", "attn", "ffn"]:
                                             module = layer_proj_prefill[mod_name]
                                             if isinstance(module, dict):
@@ -884,10 +949,12 @@ def print_layer_analysis(model_name, proj_dict, to_csv=True):
                         if to_csv:
                             model_dir = f"./data/{model_name}"
                             create_data_dir(model_dir)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_layer_analysis.csv", "w", newline="") as csvfile:
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_layer_analysis.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
                                 writer.writerows(layer_analysis_prefill)
-                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_layer_analysis.csv", "w", newline="") as csvfile:
+                            with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_decode_layer_analysis.csv",
+                                      "w", newline="") as csvfile:
                                 writer = csv.writer(csvfile)
                                 writer.writerows(layer_analysis_decode)
 

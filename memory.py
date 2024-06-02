@@ -7,7 +7,8 @@ mem_item_basic = ["H", "H_Inter", "Heads_Q", "HeadsKV", "Experts", "Layers(Mlp)"
                   "Layers(MoE)", "QKVO", "Up(W1)", "Gate(W3)", "Down(W2)", "1Expert",
                   "1Layer(Mlp)", "1Layer(MoE)", "ParamsTotal", "Dtype", "Weights"]
 mem_item_list = ["Device", "PP", "TP", "NumDevices", "Layers", "In", "Out", "DType",
-                 "BS", "Weights(GB)", "KVcache(GB)", "Activat(GB)", "Total(GB)", "Fit2Device"]
+                 "BS", "Weights(GB)", "KVcache(GB)", "Activat(GB)", "Total(GB)",
+                 "Fit2Device"]
 
 
 def mem_persistent_weights(config):
