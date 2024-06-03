@@ -179,9 +179,11 @@ def print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to
                                                       prefill_latency, decode_latency_min, decode_latency_max, decode_latency_avg,
                                                       overall_latency, throughput if mem_consumed != "OOM" else "OOM"])
                                 proj_data.append([""] * len(proj_item))
+                    '''
                     print(
                         f"{model_name}_{device}{type}_pp{pp}_tp{tp}_overall_projection_in_detatil".center(200))
                     print(tabulate(proj_data))
+                    '''
 
                     if to_csv:
                         model_dir = f"./data/{model_name}"
