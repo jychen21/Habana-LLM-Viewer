@@ -128,7 +128,7 @@ class InputConfig:
 class Config:
     def __init__(self, device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                  intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                 num_layers_moe, seq_len_q, seq_len_kv, batch_size, kvcache_bucket=None):
+                 num_layers_moe, seq_len_q, seq_len_kv, batch_size, kvcache_bucket=None, *args, **kwargs):
         self.hardware_config = HardwareConfig(device, type, dtype, pp, tp)
         self.model_config = ModelConfig(hidden_size, num_heads_q, num_heads_kv,
                                         intermediate_size, mlp_with_gate, num_experts,
@@ -147,3 +147,4 @@ class Config:
                 self.hardware_config.num_rounds = math.ceil(bt / magic)
 
         self.kvcache_bucket = kvcache_bucket
+        self.enable_vec_bmm = kwargs.get('enable_vec_bmm', False)

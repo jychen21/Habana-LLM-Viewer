@@ -459,7 +459,7 @@ def mem_decoder(config):
     return mem_data
 
 
-def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None):
+def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
@@ -477,7 +477,7 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
 
     cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                  intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                 num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket)
+                 num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket, **kwargs)
     proj_rst["weights"] = mem_persistent_weights(cfg)
     proj_rst["kvcache"] = mem_persistent_kvcache(cfg)
     proj_rst["activat"] = mem_activation(cfg)
