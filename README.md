@@ -26,48 +26,68 @@ Habana-Viewer is a projection tool for LLMs performance and memory analysis on I
 ![Llama2-13B Overall Projection](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 - Attn Projection
-[Prefill](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qksv\(bmm\)_projection.csv) |
-[Decode](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qksv\(bmm\)_projection.csv)
+    - Q@K_T
+    [Prefill](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qk_projection.csv) |
+    [Decode](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qk_projection.csv)
+
+    - Score@V
+    [Prefill](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_sv_projection.csv) |
+    [Decode](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_sv_projection.csv)
 
 - FFN Projection
-[Prefill](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up\(mm\)_projection.csv) |
-[Decode](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up\(mm\)_projection.csv)
+[Prefill](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) |
+[Decode](./data/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 
 #### Llama3-8B
 - Overall Projection [(more details in table)](./data/Llama3-8B/IntelGaudi2C_overall_projection.csv)
 ![Llama3-8B Overall Projection](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 - Attn Projection
-[Prefill](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qksv\(bmm\)_projection.csv) |
-[Decode](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qksv\(bmm\)_projection.csv)
+    - Q@K_T
+    [Prefill](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qk_projection.csv) |
+    [Decode](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qk_projection.csv)
+
+    - Score@V
+    [Prefill](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_sv_projection.csv) |
+    [Decode](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_sv_projection.csv)
 
 - FFN Projection
-[Prefill](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up\(mm\)_projection.csv) |
-[Decode](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up\(mm\)_projection.csv)
+[Prefill](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) |
+[Decode](./data/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 
 #### Qwen-7B
 - Overall Projection [(more details in table)](./data/Qwen-7B/IntelGaudi2B_overall_projection.csv)
 ![Qwen-7B Overall Projection](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 - Attn Projection
-[Prefill](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qksv\(bmm\)_projection.csv) |
-[Decode](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qksv\(bmm\)_projection.csv)
+    - Q@K_T
+    [Prefill](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qk_projection.csv) |
+    [Decode](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qk_projection.csv)
+
+    - Score@V
+    [Prefill](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_sv_projection.csv) |
+    [Decode](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_sv_projection.csv)
 
 - FFN Projection
-[Prefill](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up\(mm\)_projection.csv) |
-[Decode](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up\(mm\)_projection.csv)
+[Prefill](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) |
+[Decode](./data/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 
 #### Mixtral-8x7B
 - Overall Projection [(more details in table)](./data/Mixtral-8x7B/IntelGaudi2B_overall_projection.csv)
 ![Mixtral-8x7B Overall Projection](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 - Attn Projection
-[Prefill](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qksv\(bmm\)_projection.csv) |
-[Decode](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qksv\(bmm\)_projection.csv)
+    - Q@K_T
+    [Prefill](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_qk_projection.csv) |
+    [Decode](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_qk_projection.csv)
+
+    - Score@V
+    [Prefill](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_attn_sv_projection.csv) |
+    [Decode](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_attn_sv_projection.csv)
 
 - FFN Projection
-[Prefill](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up\(mm\)_projection.csv) |
-[Decode](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up\(mm\)_projection.csv)
+[Prefill](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) |
+[Decode](./data/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 
 
 ## Todo
