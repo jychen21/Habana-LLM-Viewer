@@ -59,6 +59,7 @@ def proj_attn_qk(config):
     num_heads_q = config.model_config.num_heads_q
     head_dim = hidden_size // num_heads_q
     num_heads_kv = config.model_config.num_heads_kv
+    num_groups = num_heads_q // num_heads_kv
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
@@ -76,11 +77,10 @@ def proj_attn_qk(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
-    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
-               * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12) * num_groups
     if seq_len_q == 1 and config.enable_vec_bmm:
         tops = config.hardware_config.flops_vec
-    runtime_compute = num_ops / tops
+    runtime_compute = num_ops / tops 
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -120,7 +120,7 @@ def proj_attn_softmax(config):
     bytes_total = params_total * num_bytes
     runtime_memory = bytes_total / bw
 
-    # ops(max) + ops(x-max) + ops(exp(x-max)) + ops(sum(exp(x-max))) + ops(x/sum(exp(x-max)))
+    # max x-max exp(x-max) sum(exp(x-max)) x/sum(exp(x-max))
     num_ops = batch_size * num_heads_q * seq_len_q * \
         seq_len_kv * 5
     runtime_compute = num_ops / flops_vec
@@ -152,6 +152,7 @@ def proj_attn_scorev(config):
     num_heads_q = config.model_config.num_heads_q
     head_dim = hidden_size // num_heads_q
     num_heads_kv = config.model_config.num_heads_kv
+    num_groups = num_heads_q // num_heads_kv
     num_bytes = config.hardware_config.num_bytes
     batch_size = config.input_config.batch_size
     seq_len_q = config.input_config.seq_len_q
@@ -169,11 +170,11 @@ def proj_attn_scorev(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
-    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
-               * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12) * num_groups
     if seq_len_q == 1 and config.enable_vec_bmm:
         tops = config.hardware_config.flops_vec
     runtime_compute = num_ops / tops
+
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -298,7 +299,6 @@ def proj_mlp_gate_or_w3(config):
     bw = config.hardware_config.hbm_bandwidth
     flops_mme = config.hardware_config.flops_mme
     flops_mme_factor = config.hardware_config.flops_mme_factor[-1]
-    # import pdb;pdb.set_trace()
     num_rounds = config.hardware_config.num_rounds
     pipeline = config.hardware_config.pipeline
     hw_ai_mme = config.hardware_config.hardware_ai_mme

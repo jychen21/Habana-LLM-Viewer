@@ -4,6 +4,7 @@ import config
 import compute
 import memory
 
+
 class Analyzer:
     def __init__(self, proj_cfg) -> None:
         self.model_list = proj_cfg["model_list"]
@@ -39,7 +40,8 @@ class Analyzer:
                                 proj_dict[device][type][pp][tp][dtype] = {}
 
                                 for input in self.input_list:
-                                    proj_dict[device][type][pp][tp][dtype][input] = {}
+                                    proj_dict[device][type][pp][tp][dtype][input] = {
+                                    }
 
                                     for output in self.output_list:
                                         proj_dict[device][type][pp][tp][dtype][input][output] = [
@@ -50,16 +52,19 @@ class Analyzer:
                                                 model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
                                             memory_projection = memory.do_projection(
                                                 model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
-                                            proj_rst = {"compute": compute_projection, "memory": memory_projection}
-                                            proj_dict[device][type][pp][tp][dtype][input][output].append((bs, proj_rst))
+                                            proj_rst = {
+                                                "compute": compute_projection, "memory": memory_projection}
+                                            proj_dict[device][type][pp][tp][dtype][input][output].append(
+                                                (bs, proj_rst))
 
-            helper.print_projection(model_name, proj_dict, self.kvcache_bucket, self.bs_list, to_csv, plot)
+            helper.print_projection(
+                model_name, proj_dict, self.kvcache_bucket, self.bs_list, to_csv, plot)
 
 
 if __name__ == "__main__":
     proj_cfg = {
         # ["Llama2-7B", "Llama2-13B", "Mixtral-8x7B", "GLaM-1.2T"]
-        "model_list": ["Llama2-7B", "Llama2-13B"],
+        "model_list": ["Llama2-7B", "Llama3-8B"],
         "device_list": ["IntelGaudi2"],
         "type_list": ["B"],  # ["C", "D"],
         "parallel": {
@@ -71,7 +76,8 @@ if __name__ == "__main__":
             "input_list": [512, 1024, 2048],  # 32000
             "output_list": [512],
         },
-        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512], # [1] + [i for i in range(2, 257, 2)],
+        # [1] + [i for i in range(2, 257, 2)],
+        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
         "optims": {
             "kvcache_bucket": 256,  # None, 1, or >= 256
             "flash_attention": False,  # Todo

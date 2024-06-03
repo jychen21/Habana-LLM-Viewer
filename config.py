@@ -10,6 +10,7 @@ ModelDict = {
     "Llama2-7B": models.model_llama2_7b,
     "Llama2-13B": models.model_llama2_13b,
     # "Llama2-70B": models.model_llama2_70b,
+    "Llama3-8B": models.model_llama3_8b,
 
     # Qwen
     "Qwen-7B": models.model_qwen_7b,
@@ -17,7 +18,7 @@ ModelDict = {
 
     # MoE
     "Mixtral-8x7B": models.model_mixtral_8x7b,
-    "GLaM-1.2T": models.model_glam_1dot2t,
+    # "GLaM-1.2T": models.model_glam_1dot2t,
     # "MoE-1.8T": models.model_moe_1dot8t,
 
     # Falcon
@@ -91,7 +92,7 @@ class HardwareConfig:
         self.flops_mme_factor = self.device_ratio[1:3]
         self.flops_mme_factor.append(self.flops_mme_factor[0])
         self.num_rounds = 1.0
-        self.magic_number = 128
+        self.magic_number = 2**7
         self.pipeline = self.device_ratio[-3]
         self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
         self.hardware_ai_mme = self.flops_mme / self.hbm_bandwidth
@@ -133,20 +134,17 @@ class Config:
                                         intermediate_size, mlp_with_gate, num_experts,
                                         num_layers_mlp, num_layers_moe)
         self.input_config = InputConfig(seq_len_q, seq_len_kv, batch_size)
-
-        bs = self.input_config.batch_size
-        tq = self.input_config.seq_len_q
-        bs_by_tq = bs * tq
+        bt = self.input_config.batch_size * self.input_config.seq_len_q
         magic = self.hardware_config.magic_number
-        if bs_by_tq > magic:
-            magic *= 2
+        if bt > magic:
+            magic *= 2.0
             self.hardware_config.flops_mme_factor[-1] = self.hardware_config.flops_mme_factor[1]
-            if bs_by_tq <= magic:
+            if bt <= magic:
                 self.hardware_config.pipeline = self.hardware_config.device_ratio[-2]
-            elif bs_by_tq > magic:
+            elif bt > magic:
                 self.hardware_config.pipeline = self.hardware_config.device_ratio[-1]
-            if bs_by_tq % magic != 0:
-                self.hardware_config.num_rounds = math.ceil(bs_by_tq / magic)
+            if bt % magic != 0:
+                self.hardware_config.num_rounds = math.ceil(bt / magic)
 
         self.kvcache_bucket = kvcache_bucket
         self.enable_vec_bmm = kwargs.get('enable_vec_bmm', False)
