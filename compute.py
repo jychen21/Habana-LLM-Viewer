@@ -78,6 +78,8 @@ def proj_attn_qk(config):
     num_ops = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
     tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
                * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
+    if seq_len_q == 1 and config.enable_vec_bmm:
+        tops = config.hardware_config.flops_vec
     runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
@@ -169,6 +171,8 @@ def proj_attn_scorev(config):
     num_ops = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
     tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12
                * (num_heads_kv if num_heads_kv != num_heads_q else 1.0))
+    if seq_len_q == 1 and config.enable_vec_bmm:
+        tops = config.hardware_config.flops_vec
     runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
@@ -404,7 +408,7 @@ def proj_decoder(config):
     return runtime_decoder, single_layer_items
 
 
-def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None):
+def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
@@ -423,7 +427,7 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
             seq_len_q = seq_len_kv = input
             cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                         num_layers_moe, seq_len_q, seq_len_kv, bs, None)
+                         num_layers_moe, seq_len_q, seq_len_kv, bs, None, **kwargs)
             proj_rst["prefill"] = proj_decoder(cfg)
         else:
             seq_len_q = 1
@@ -433,7 +437,7 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
                     math.ceil(step / kvcache_bucket) * kvcache_bucket
             cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
-                         num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket)
+                         num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket, **kwargs)
             proj_decoding_steps.append(proj_decoder(cfg))
 
     proj_rst["decode"] = proj_decoding_steps
