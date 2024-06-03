@@ -72,9 +72,9 @@ T_BW = 1e12
 
 
 DeviceType2Ratio = {
-    "B": [1.00, 3.38, 1.69, 0.14, 0.42, 0.68],
-    "C": [0.65, 2.19, 1.10, 0.26, 0.67, 0.88],
-    "D": [0.32, 1.08, 0.54, 0.67, 0.84, 0.94],
+    "B": [1.00, 3.38, 1.69, 1.6, 1.25, 0.14, 0.42, 0.68],
+    "C": [0.65, 2.19, 1.10, 1.6, 1.25, 0.26, 0.67, 0.88],
+    "D": [0.32, 1.08, 0.54, 1.6, 1.25, 0.67, 0.84, 0.94],
 }
 
 
@@ -136,8 +136,9 @@ class Config:
         self.input_config = InputConfig(seq_len_q, seq_len_kv, batch_size)
         bt = self.input_config.batch_size * self.input_config.seq_len_q
         magic = self.hardware_config.magic_number
-        if bt > magic:
-            magic *= 2.0
+        magic *= self.hardware_config.device_ratio[3]
+        if bt > self.hardware_config.magic_number:
+            magic *= self.hardware_config.device_ratio[4]
             self.hardware_config.flops_mme_factor[-1] = self.hardware_config.flops_mme_factor[1]
             if bt <= magic:
                 self.hardware_config.pipeline = self.hardware_config.device_ratio[-2]
