@@ -77,10 +77,13 @@ def proj_attn_qk(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
-    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12) * num_groups
-    if seq_len_q == 1 and config.enable_vec_bmm:
-        tops = config.hardware_config.flops_vec
-    runtime_compute = num_ops / tops 
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12)
+    if seq_len_q == 1:
+        if config.enable_vec_bmm:
+            tops = config.hardware_config.flops_vec
+        else:
+            tops *= num_groups
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
@@ -170,11 +173,14 @@ def proj_attn_scorev(config):
     runtime_memory = bytes_total / bw
 
     num_ops = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
-    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12) * num_groups
-    if seq_len_q == 1 and config.enable_vec_bmm:
-        tops = config.hardware_config.flops_vec
-    runtime_compute = num_ops / tops
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12)
+    if seq_len_q == 1:
+        if config.enable_vec_bmm:
+            tops = config.hardware_config.flops_vec
+        else:
+            tops *= num_groups
 
+    runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
     runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
