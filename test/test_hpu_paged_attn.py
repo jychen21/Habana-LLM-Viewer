@@ -1,19 +1,18 @@
 # Refer to
 # https://github.com/HabanaAI/vllm-fork/blob/habana_main/benchmarks/kernels/benchmark_paged_attention.py
 
-import os
-os.environ["PA_SPLIT_VALUE"]="1"
-import argparse
-import random
-import time
-from typing import Optional, List, Tuple, Union
-
-import torch
-
-from vllm.hpu import ops as hpu_ops
-from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, get_kv_cache_torch_dtype
-
+import habana_frameworks.torch.hpu.graphs as htgraphs
 import habana_frameworks.torch as htorch
+from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, get_kv_cache_torch_dtype
+from vllm.hpu import ops as hpu_ops
+import torch
+from typing import Optional, List, Tuple, Union
+import csv
+import time
+import random
+import argparse
+import os
+os.environ["PA_SPLIT_VALUE"] = "1"
 
 
 NUM_BLOCKS = 1024
@@ -37,16 +36,16 @@ def create_kv_caches_with_random_hpu(
 
     torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
 
-    kv_cache_shape = (num_blocks, num_heads, head_size, block_size)
+    kv_cache_shape = (num_blocks, block_size, num_heads, head_size)
     key_caches = []
     value_caches = []
     for _ in range(num_layers):
         key_cache = torch.zeros(kv_cache_shape,
-                    dtype=torch_dtype,
-                    device=device)
+                                dtype=torch_dtype,
+                                device=device)
         value_cache = torch.zeros(kv_cache_shape,
-                dtype=torch_dtype,
-                device=device)
+                                  dtype=torch_dtype,
+                                  device=device)
         key_caches.append(key_cache)
         value_caches.append(value_cache)
 
@@ -68,7 +67,6 @@ class HPUBenchmarkModel(torch.nn.Module):
             block_tables,
             seq_lens,
             block_size,
-            max_seq_len,
             alibi_slopes,
             kv_cache_dtype,
         )
@@ -78,134 +76,208 @@ class HPUBenchmarkModel(torch.nn.Module):
 
 model = HPUBenchmarkModel()
 model.eval()
-import habana_frameworks.torch.hpu.graphs as htgraphs
 htgraphs.wrap_in_hpu_graph(model)
 
 
-def run_hpu_benchmark(input: tuple) -> float:
+def run_hpu_benchmark(input: tuple, num_iters: int, warmup: bool = False) -> tuple:
     query, key_cache_hpu, value_cache_hpu, num_kv_heads, scale, block_tables, \
         seq_lens, block_size, max_seq_len, alibi_slopes, kv_cache_dtype = input
 
     htorch.core.mark_step()
     torch.hpu.synchronize()
     start_time = time.perf_counter()
-    model(
-        query,
-        key_cache_hpu,
-        value_cache_hpu,
-        num_kv_heads,
-        scale,
-        block_tables,
-        seq_lens,
-        block_size,
-        max_seq_len,
-        alibi_slopes,
-        kv_cache_dtype,
-    )
+    for i in range(num_iters):
+        model(
+            query,
+            key_cache_hpu,
+            value_cache_hpu,
+            num_kv_heads,
+            scale,
+            block_tables,
+            seq_lens,
+            block_size,
+            alibi_slopes,
+            kv_cache_dtype,
+        )
     htorch.core.mark_step()
     torch.hpu.synchronize()
     end_time = time.perf_counter()
-    print(f"version=v1, batch_size={query.size(0)}, seq_len={max_seq_len}, num_query_heads={query.size(1)}, num_kv_heads={key_cache_hpu.size(1)}, head_size={query.size(2)}, block_size={key_cache_hpu.size(-1)}, running time={(end_time - start_time) * 1e6:.3f}us")
+
+    bs = query.size(0)
+    seq_len = max_seq_len
+    heads_q = query.size(1)
+    heads_kv = key_cache_hpu.size(-2)
+    head_size = query.size(2)
+    block_size = key_cache_hpu.size(1)
+    type = "MHA" if heads_q == heads_kv else (
+        "GQA" if heads_kv != 1 else "MQA")
+    duration = round((end_time - start_time) / num_iters * 1e6, 3)
+
+    if not warmup:
+        # print(f"version=v1, batch_size={query.size(0)}, seq_len={max_seq_len}, num_query_heads={query.size(1)}, num_kv_heads={key_cache_hpu.size(-2)}, head_size={query.size(2)}, block_size={key_cache_hpu.size(1)}, running time={(end_time - start_time) / num_iters * 1e6:.3f}us")
+        print(f"{duration} us")
+        # print(f"batch_size={query.size(0)}, seq_len={max_seq_len}, q={query.size(1)}, kv={key_cache_hpu.size(-2)}, head_size={query.size(2)}, block_size={key_cache_hpu.size(1)}, {(end_time - start_time) / num_iters * 1e6:.3f}")
+
+    return (type, bs, seq_len, heads_q, heads_kv, head_size, duration)
 
 
 @torch.inference_mode()
 def main(
     version: str,
     num_seqs_list: List,
-    seq_len: int,
-    num_query_heads: int,
-    num_kv_heads: int,
+    seq_len_list: int,
+    num_query_heads_list: int,
+    num_kv_heads_list: int,
     head_size: int,
     use_alibi: bool,
     block_size: int,
     dtype: torch.dtype,
     seed: int,
-    do_profile: bool,
+    do_profile: bool = False,
     device: str = "hpu",
     kv_cache_dtype: Optional[str] = None,
-    num_iters: int = 10,
-    profiling: bool = True
+    num_iters: int = 50,
 ) -> None:
-    input_list = []
-    for num_seqs in num_seqs_list:
-        random.seed(seed)
-        torch.random.manual_seed(seed)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed(seed)
+    random.seed(seed)
+    torch.random.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
 
-        scale = float(1.0 / (head_size**0.5))
-        query = torch.empty(num_seqs,
-                            num_query_heads,
-                            head_size,
-                            dtype=dtype,
-                            device=device)
-        query.uniform_(-scale, scale)
-
-        assert num_query_heads % num_kv_heads == 0
-        alibi_slopes = None
-        if use_alibi:
-            alibi_slopes = torch.randn(num_query_heads,
-                                    dtype=torch.float,
+    input_dict = {}
+    # heads
+    for i, num_query_heads, num_kv_heads in zip(range(len(num_query_heads_list)), num_query_heads_list, num_kv_heads_list):
+        query_key = f"{i}_{num_query_heads}"
+        kv_key = f"{i}_{num_kv_heads}"
+        input_dict[query_key] = {}
+        for seq_len in seq_len_list:  # kv length
+            if seq_len not in input_dict[query_key].keys():
+                input_dict[query_key][seq_len] = {}
+                if kv_key not in input_dict[query_key][seq_len].keys():
+                    input_dict[query_key][seq_len][kv_key] = []
+            for num_seqs in num_seqs_list:  # batch_size
+                scale = float(1.0 / (head_size**0.5))
+                query = torch.empty(num_seqs,
+                                    num_query_heads,
+                                    head_size,
+                                    dtype=dtype,
                                     device=device)
+                query.uniform_(-scale, scale)
 
-        seq_lens = [seq_len for _ in range(num_seqs)]
-        max_seq_len = max(seq_lens)
-        seq_lens = torch.tensor(seq_lens, dtype=torch.int, device=device)
+                assert num_query_heads % num_kv_heads == 0
+                alibi_slopes = None
+                if use_alibi:
+                    alibi_slopes = torch.randn(num_query_heads,
+                                               dtype=torch.float,
+                                               device=device)
 
-        # Create the block tables.
-        max_num_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
-        block_tables = []
-        for _ in range(num_seqs):
-            block_table = [
-                random.randint(0, NUM_BLOCKS - 1)
-                for _ in range(max_num_blocks_per_seq)
-            ]
-            block_tables.append(block_table)
-        block_tables = torch.tensor(block_tables, dtype=torch.int, device=device)
+                seq_lens = [seq_len for _ in range(num_seqs)]
+                max_seq_len = max(seq_lens)
+                seq_lens = torch.tensor(
+                    seq_lens, dtype=torch.int, device=device)
 
-        # Create the KV cache.
-        key_caches_hpu, value_caches_hpu = create_kv_caches_with_random_hpu(NUM_BLOCKS,
-                                                                            block_size,
-                                                                            1,
-                                                                            num_kv_heads,
-                                                                            head_size,
-                                                                            kv_cache_dtype,
-                                                                            dtype,
-                                                                            device=device)
-        key_cache_hpu, value_cache_hpu = key_caches_hpu[0], value_caches_hpu[0]
-        input_list.append((query, key_cache_hpu, value_cache_hpu, num_kv_heads, scale,
-                           block_tables, seq_lens, block_size, max_seq_len, alibi_slopes, kv_cache_dtype))
+                # Create the block tables.
+                max_num_blocks_per_seq = (
+                    max_seq_len + block_size - 1) // block_size
+                block_tables = []
+                for _ in range(num_seqs):
+                    block_table = [
+                        random.randint(0, NUM_BLOCKS - 1)
+                        for _ in range(max_num_blocks_per_seq)
+                    ]
+                    block_tables.append(block_table)
+                block_tables = torch.tensor(
+                    block_tables, dtype=torch.int, device=device)
 
-    attn_type = "MHA" if query.size(1) == key_cache_hpu.size(1) else "GQA" # just ignore mqa
+                # Create the KV cache.
+                key_caches_hpu, value_caches_hpu = create_kv_caches_with_random_hpu(NUM_BLOCKS,
+                                                                                    block_size,
+                                                                                    1,
+                                                                                    num_kv_heads,
+                                                                                    head_size,
+                                                                                    kv_cache_dtype,
+                                                                                    dtype,
+                                                                                    device=device)
+                key_cache_hpu, value_cache_hpu = key_caches_hpu[0], value_caches_hpu[0]
+                input_dict[query_key][seq_len][kv_key].append((query,
+                                                               key_cache_hpu,
+                                                               value_cache_hpu,
+                                                               num_kv_heads,
+                                                               scale,
+                                                               block_tables,
+                                                               seq_lens,
+                                                               block_size,
+                                                               max_seq_len,
+                                                               alibi_slopes,
+                                                               kv_cache_dtype))
 
-    print(f"Warming up {attn_type} BS={num_seqs_list}...")
-    for input in input_list:
-        run_hpu_benchmark(input)
-        htorch.core.mark_step()
-        torch.hpu.synchronize()
+    print(f"Warming up...")
+    for q, q_dict in input_dict.items():
+        print(f"heads_q={q[2:]}...")
+        for seq_len, s_dict in q_dict.items():
+            print(f"......seq_len={seq_len}...")
+            for k, k_list in s_dict.items():
+                print(f".........heads_kv={k[2:]}...")
+                for input in k_list:
+                    print(f"............bs={input[0].size(0)}...")
+                    run_hpu_benchmark(input, num_iters=1, warmup=True)
+                    htorch.core.mark_step()
+                    torch.hpu.synchronize()
 
-    print(f"Benchmark {attn_type} BS={num_seqs_list}...")
-    if profiling:
-        name = f"PA_v1_{attn_type}_Hq{query.size(1)}_Hkv{key_cache_hpu.size(1)}_BlockSize{block_size}_Seq{max_seq_len}"
+    if do_profile:
+        print(f"Profiling Benchmark...")
+        # name = f"PA_V1_{attn_type}_BlockSize{block_size}_T{max_seq_len}_Q{query.size(1)}_KV{key_cache_hpu.size(-2)}_BS{num_seqs_list}"
+        name = f"PA_V1_BlockSize{block_size}"
         profiler = torch.profiler.profile(
-            schedule=torch.profiler.schedule(wait=0, warmup=3, active=3, repeat=0),
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.HPU],
-            on_trace_ready=torch.profiler.tensorboard_trace_handler(name, use_gzip=True),
+            schedule=torch.profiler.schedule(
+                wait=0, warmup=3, active=2, repeat=0),
+            activities=[torch.profiler.ProfilerActivity.CPU,
+                        torch.profiler.ProfilerActivity.HPU],
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(
+                name, use_gzip=True),
             with_stack=True, with_modules=False, record_shapes=False, profile_memory=False)
         profiler.start()
-    torch.hpu.synchronize()
-    for i in range(num_iters):
-        print(f"Iteration_{i} Start")
-        for input in input_list:
-            run_hpu_benchmark(input)
-            htorch.core.mark_step()
-            torch.hpu.synchronize()
-        if profiling:
+        for i in range(num_iters):
+            print(f"Iteration_{i} Start")
+            for q, q_dict in input_dict.items():
+                print(f"heads_q={q[2:]}...")
+                for seq_len, s_dict in q_dict.items():
+                    print(f"......seq_len={seq_len}...")
+                    for k, k_list in s_dict.items():
+                        print(f".........heads_kv={k[2:]}...")
+                        for input in k_list:
+                            print(f"............bs={input[0].size(0)}...")
+                            run_hpu_benchmark(input, num_iters=1, warmup=False)
+                            htorch.core.mark_step()
+                            torch.hpu.synchronize()
             profiler.step()
-        print(f"Iteration_{i} Stop")
-    if profiling:
+            print(f"Iteration_{i} Stop")
         profiler.stop()
-        print(f"Benchmark Finished! Please check profiles stored in {name}")
+        print(
+            f"Profiling Benchmark Finished! Please check profiles stored in {name}")
+    else:
+        print(f"Pure Benchmark...")
+        item_list = [["Type", "Dtype", "BS", "Q_Length",
+                      "KV_Length", "HeadDim", "Q_Head", "KV_Head", "Gaudi2 (us)"]]
+        for q, q_dict in input_dict.items():
+            print(f"heads_q={q[2:]}...")
+            for seq_len, s_dict in q_dict.items():
+                print(f"......seq_len={seq_len}...")
+                for k, k_list in s_dict.items():
+                    print(f".........heads_kv={k[2:]}...")
+                    for input in k_list:
+                        print(f"............bs={input[0].size(0)}...")
+                        type, bs, seq_len, heads_q, heads_kv, head_size, duration = \
+                            run_hpu_benchmark(
+                                input, num_iters=100, warmup=False)
+                        htorch.core.mark_step()
+                        torch.hpu.synchronize()
+                        item_list.append(
+                            [type, "FP16/BF16", bs, 1, seq_len, head_size, heads_q, heads_kv, duration])
+        path = "./benchmark_pa_new_layout.csv"
+        with open(path, "w", newline="") as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerows(item_list)
+        print(f"Pure Benchmark Finished! Please check data stored in {path}")
 
 
 if __name__ == '__main__':
@@ -215,13 +287,22 @@ if __name__ == '__main__':
                         type=str,
                         choices=["v1"],
                         default="v1")
+    parser.add_argument("--seq-len-list",
+                        nargs='+',
+                        type=int,
+                        default=[512, 1024, 2048, 4096, 8192])
+    parser.add_argument("--num-query-heads-list",
+                        nargs='+',
+                        type=int,
+                        default=[32, 32, 32, 32, 32, 8, 16, 32])
+    parser.add_argument("--num-kv-heads-list",
+                        nargs='+',
+                        type=int,
+                        default=[32, 2, 4, 8, 16, 1, 1, 1])
     parser.add_argument("--batch-size-list",
                         nargs='+',
                         type=int,
                         default=[1, 4, 16, 64, 256])
-    parser.add_argument("--seq_len", type=int, default=8192)
-    parser.add_argument("--num-query-heads", type=int, default=32)
-    parser.add_argument("--num-kv-heads", type=int, default=32)
     parser.add_argument("--head-size",
                         type=int,
                         choices=[64, 80, 96, 112, 128, 256],
@@ -242,22 +323,23 @@ if __name__ == '__main__':
         type=str,
         choices=["auto", "fp8"],
         default="auto",
-        help=
-        'Data type for kv cache storage. If "auto", will use model data type. '
+        help='Data type for kv cache storage. If "auto", will use model data type. '
         'FP8_E5M2 (without scaling) is only supported on cuda version greater '
         'than 11.8. On ROCm (AMD GPU), FP8_E4M3 is instead supported for '
         'common inference criteria.')
     args = parser.parse_args()
     print(args)
 
-    if args.num_query_heads % args.num_kv_heads != 0:
-        raise ValueError("num_query_heads must be divisible by num_kv_heads")
+    for num_query_heads, num_kv_heads in zip(args.num_query_heads_list, args.num_kv_heads_list):
+        if num_query_heads % num_kv_heads != 0:
+            raise ValueError(
+                "num_query_heads must be divisible by num_kv_heads")
     main(
         version=args.version,
         num_seqs_list=args.batch_size_list,
-        seq_len=args.seq_len,
-        num_query_heads=args.num_query_heads,
-        num_kv_heads=args.num_kv_heads,
+        seq_len_list=args.seq_len_list,
+        num_query_heads_list=args.num_query_heads_list,
+        num_kv_heads_list=args.num_kv_heads_list,
         head_size=args.head_size,
         block_size=args.block_size,
         use_alibi=args.use_alibi,
