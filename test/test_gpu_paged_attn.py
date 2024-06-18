@@ -83,6 +83,8 @@ def run_cuda_benchmark(version: str, input: tuple, num_iters: int, profile: bool
         "GQA" if heads_kv != 1 else "MQA")
     duration = round((end_time - start_time) / num_iters * 1e6, 3)
 
+    print(f"{duration} us")
+
     return (type, bs, seq_len, heads_q, heads_kv, head_size, duration)
 
 
@@ -229,8 +231,9 @@ def main(
                     for input in k_list:
                         print(f"............bs={input[0].size(0)}...")
                         type, bs, seq_len, heads_q, heads_kv, head_size, duration = \
-                            run_cuda_benchmark(
-                                version, input, num_iters=100, profile=False)
+                            run_cuda_benchmark(version, input, num_iters=100, profile=False)
+                        item_list.append(
+                            [type, "FP16/BF16", bs, 1, seq_len, head_size, heads_q, heads_kv, duration])
         path = f"./benchmark_gpu_pa_{version}.csv"
         with open(path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
