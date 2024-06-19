@@ -122,7 +122,7 @@ def print_overall_projection(model_name, proj_dict, kvcache_bucket, batchsize_li
             print(tabulate(proj_data))
 
             if to_csv:
-                model_dir = f"./data/{model_name}"
+                model_dir = f"./data/model/{model_name}"
                 create_data_dir(model_dir)
                 with open(f"{model_dir}/{device}{type}_overall_projection.csv", "w", newline="") as csvfile:
                     writer = csv.writer(csvfile)
@@ -186,7 +186,7 @@ def print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to
                     '''
 
                     if to_csv:
-                        model_dir = f"./data/{model_name}"
+                        model_dir = f"./data/model/{model_name}"
                         create_data_dir(model_dir)
                         with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_overall_projection_in_detatil.csv", "w", newline="") as csvfile:
                             writer = csv.writer(csvfile)
@@ -388,7 +388,7 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
                         '''
 
                         if to_csv:
-                            model_dir = f"./data/{model_name}"
+                            model_dir = f"./data/model/{model_name}"
                             create_data_dir(model_dir)
                             with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_attn_qk_projection.csv",
                                       "w", newline="") as csvfile:
@@ -534,7 +534,7 @@ def print_layer_analysis(model_name, proj_dict, to_csv=True):
                         '''
 
                         if to_csv:
-                            model_dir = f"./data/{model_name}"
+                            model_dir = f"./data/model/{model_name}"
                             create_data_dir(model_dir)
                             with open(f"{model_dir}/{device}{type}_pp{pp}_tp{tp}_{dtype}_prefill_layer_analysis.csv",
                                       "w", newline="") as csvfile:
@@ -583,3 +583,35 @@ def print_projected_mem_per_device(model_name, memory_dict, batchsize_list, cont
                 # print(tabulate(mem_data))
             print("\n")
     return proj_dict
+
+
+def print_matmul_projection(op_name, proj_dict, to_csv=True):
+    proj_item = ["Operation", "Device", "DType", "M",
+                 "N", "K", "AI", "Latency(us)", "TFLOPs(1e12)"]
+
+    for device, device_proj in proj_dict.items():
+        for type, type_proj in device_proj.items():
+            proj_data = [proj_item]
+            for dtype, dtype_proj in type_proj.items():
+                for proj_rst in dtype_proj:
+                    m, n, k = proj_rst["m"], proj_rst["n"], proj_rst["k"]
+                    latency = round(
+                        proj_rst["latency"] * MicroSecs, 2)
+                    math_ai = round(proj_rst["math_ai"], 2)
+
+                    throughput = round((1 / latency) / TFLOPS, 2)
+                    proj_data.append(
+                        [op_name, f"{device}{type}", dtype, m,
+                            n, k, math_ai, latency, throughput]
+                    )
+                proj_data.append([""] * len(proj_item))
+
+            print(f"{op_name}_{device}{type}_projection".center(80))
+            print(tabulate(proj_data))
+
+            if to_csv:
+                op_dir = f"./data/operation/{op_name}"
+                create_data_dir(op_dir)
+                with open(f"{op_dir}/{device}{type}_projection.csv", "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(proj_data)

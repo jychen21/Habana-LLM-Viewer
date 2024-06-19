@@ -48,9 +48,9 @@ class Analyzer:
                                         ]
 
                                         for bs in tqdm(self.bs_list):
-                                            compute_projection = compute.do_projection(
+                                            compute_projection = compute.do_model_projection(
                                                 model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
-                                            memory_projection = memory.do_projection(
+                                            memory_projection = memory.do_model_projection(
                                                 model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
                                             proj_rst = {
                                                 "compute": compute_projection, "memory": memory_projection}
@@ -86,4 +86,4 @@ if __name__ == "__main__":
     }
 
     analyzer = Analyzer(proj_cfg)
-    analyzer.analyze(True, True)
+    analyzer.analyze(False, False)

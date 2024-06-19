@@ -6,26 +6,17 @@ import models
 
 
 ModelDict = {
-    # Llama
     "Llama2-7B": models.model_llama2_7b,
     "Llama2-13B": models.model_llama2_13b,
     # "Llama2-70B": models.model_llama2_70b,
     "Llama3-8B": models.model_llama3_8b,
-
-    # Qwen
     "Qwen-7B": models.model_qwen_7b,
     "Qwen-14B": models.model_qwen_14b,
-
-    # MoE
     "Mixtral-8x7B": models.model_mixtral_8x7b,
     # "GLaM-1.2T": models.model_glam_1dot2t,
     # "MoE-1.8T": models.model_moe_1dot8t,
-
-    # Falcon
     "Falcon-7B": models.model_falcon_7b,
     # "Falcon-40B": models.model_falcon_40b,
-
-    # ChatGLM
     "ChatGLM2-6B": models.model_chatglm2_6b,
 }
 

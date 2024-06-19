@@ -8,6 +8,46 @@ import math
 from config import *
 
 
+def proj_matmul(config: HardwareConfig, m, n, k):
+    num_bytes = config.num_bytes
+    bw = config.hbm_bandwidth
+    flops_mme = config.flops_mme
+    flops_mme_factor = config.flops_mme_factor[-1]
+    num_rounds = config.num_rounds
+    pipeline = config.pipeline
+
+    params_in_input_a = m * k
+    params_in_input_b = n * k
+    params_out = m * n
+    params_total = params_in_input_a + params_in_input_b + params_out
+    bytes_total = params_total * num_bytes
+    runtime_memory = bytes_total / bw
+
+    num_ops = m * n * k * 2
+    tops = min(flops_mme, flops_mme_factor * m * 1e12)
+    runtime_compute = num_ops / tops
+    runtime_compute *= num_rounds
+
+    math_ai = num_ops / bytes_total
+    runtime_roofline = runtime_memory + runtime_compute * pipeline
+
+    proj_rst = {
+        "name": "matmul",
+        "m": m,
+        "n": n,
+        "k": k,
+        "operations": num_ops,
+        "size": bytes_total,
+        "math_ai": math_ai,
+        "tops_roofline": tops,
+        "mem_time": runtime_memory,
+        "cmp_time": runtime_compute,
+        "latency": runtime_roofline,
+    }
+
+    return proj_rst
+
+
 def proj_qkvo_proj(config):
     hidden_size = config.model_config.hidden_size
     num_bytes = config.hardware_config.num_bytes
@@ -199,6 +239,56 @@ def proj_attn_scorev(config):
         "latency": runtime_roofline,
         "bound": bound
     }
+
+    return proj_rst
+
+
+def proj_paged_attn_v1(config: HardwareConfig, num_blocks, block_size,
+                       num_heads_q, num_heads_kv, head_dim, bs, seqlen_kv):
+    num_bytes = config.num_bytes
+    bw = config.hbm_bandwidth
+    flops_mme = config.flops_mme
+    flops_mme_factor = config.flops_mme_factor[-1]
+    num_rounds = config.num_rounds
+    pipeline = config.pipeline
+
+    proj_rst = {}
+
+    # proj_rst = {
+    #     "name": "PA_V1",
+    #     "operations": num_ops,
+    #     "size": bytes_total,
+    #     "math_ai": math_ai,
+    #     "tops_roofline": tops,
+    #     "mem_time": runtime_memory,
+    #     "cmp_time": runtime_compute,
+    #     "latency": runtime_roofline,
+    # }
+
+    return proj_rst
+
+
+def proj_flash_attn_v1(config: HardwareConfig, block_size, num_heads_q,
+                       num_heads_kv, head_dim, bs, seqlen_kv):
+    num_bytes = config.num_bytes
+    bw = config.hbm_bandwidth
+    flops_mme = config.flops_mme
+    flops_mme_factor = config.flops_mme_factor[-1]
+    num_rounds = config.num_rounds
+    pipeline = config.pipeline
+
+    proj_rst = {}
+
+    # proj_rst = {
+    #     "name": "FA_V1",
+    #     "operations": num_ops,
+    #     "size": bytes_total,
+    #     "math_ai": math_ai,
+    #     "tops_roofline": tops,
+    #     "mem_time": runtime_memory,
+    #     "cmp_time": runtime_compute,
+    #     "latency": runtime_roofline,
+    # }
 
     return proj_rst
 
@@ -414,7 +504,7 @@ def proj_decoder(config):
     return runtime_decoder, single_layer_items
 
 
-def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
+def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
@@ -447,5 +537,52 @@ def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kv
             proj_decoding_steps.append(proj_decoder(cfg))
 
     proj_rst["decode"] = proj_decoding_steps
+
+    return proj_rst
+
+
+def do_op_projection(op_name, device, type, dtype, **kwargs):
+    cfg = HardwareConfig(device, type, dtype)
+
+    if op_name == "Matmul":
+        m = kwargs.get('m', 1)
+        n = kwargs.get('n', 4096)
+        k = kwargs.get('k', 4096)
+
+        proj_rst = proj_matmul(cfg, m, n, k)
+    elif op_name == "PagedAttentionV1":
+        num_blocks = kwargs.get("num_blocks", 1024)
+        block_size = kwargs.get("block_size", 128)
+        num_heads_q = kwargs.get("heads_q", 32)
+        num_heads_kv = kwargs.get("heads_kv", 32)
+        head_dim = kwargs.get("head_dim", 128)
+        bs = kwargs.get("bs", 1)
+        seqlen_kv = kwargs.get("seqlen_kv", 4096)
+
+        proj_rst = proj_paged_attn_v1(cfg,
+                                      num_blocks,
+                                      block_size,
+                                      num_heads_q,
+                                      num_heads_kv,
+                                      head_dim,
+                                      bs,
+                                      seqlen_kv)
+    elif op_name == "FlashAttentionV1":
+        block_size = kwargs.get("block_size", 1024)
+        num_heads_q = kwargs.get("heads_q", 32)
+        num_heads_kv = kwargs.get("heads_kv", 32)
+        head_dim = kwargs.get("head_dim", 128)
+        bs = kwargs.get("bs", 1)
+        seqlen_kv = kwargs.get("seqlen_kv", 4096)
+
+        proj_rst = proj_flash_attn_v1(cfg,
+                                      block_size,
+                                      num_heads_q,
+                                      num_heads_kv,
+                                      head_dim,
+                                      bs,
+                                      seqlen_kv)
+    else:
+        assert 0, "operation projection currently just support Matmul!"
 
     return proj_rst

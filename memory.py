@@ -459,7 +459,7 @@ def mem_decoder(config):
     return mem_data
 
 
-def do_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
+def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, bs, kvcache_bucket=None, **kwargs):
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
     num_heads_q = model["num_heads_q"]
