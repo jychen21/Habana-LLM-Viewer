@@ -1,7 +1,7 @@
-# projection
+## Habana-Viewer
 Habana-Viewer is a projection tool for LLMs performance and memory analysis on Intel Gaudi platform. You can use this tool as a model optimization guidline on Intel Gaudi. This tool contains model projection as well as operation projection.
 
-## Model Projection
+### Model Projection
 |Model Name|Projected Data|
 |:------:|:------:|
 |Llama2-7B|[Link](./data/model/Llama2-7B/)|
@@ -11,14 +11,13 @@ Habana-Viewer is a projection tool for LLMs performance and memory analysis on I
 |Qwen-14B|[Link](./data/model/Qwen-14B/)|
 |Mixtral-8x7B|[Link](./data/model/Mixtral-8x7B/)|
 
-## Model Projection
+### Op Projection
 |Op Name|Projected Data|
 |:------:|:------:|
 |Matmul|[Link](./data/operation/Matmul/)|
 
-## Example
-### Model Projection
-#### Compute
+### Example
+#### Model Projection
 <!-- ##### Llama2-13B
 - Overall Projection [(more details in table)](./data/model/Llama2-13B/IntelGaudi2C_overall_projection.csv)
 ![Llama2-13B Overall Projection](./data/model/Llama2-13B/IntelGaudi2B_pp1_tp1_overall_projection.png)
@@ -87,22 +86,22 @@ Habana-Viewer is a projection tool for LLMs performance and memory analysis on I
 [Prefill](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) |
 [Decode](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 
-<!-- ### Operation Projection -->
+<!-- #### Operation Projection -->
 
-## Command
-### Model Projection
+### Command
+#### Model Projection
 1. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
     ```sh
     python run_model_projection.py
     ```
 <!-- 2. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
-### Operation Projection
+#### Operation Projection
 1. Simpily run with **[run_op_projection.py](./run_op_projection.py)** and the results will be saved to folder "data/operation", same with model projection, one can modify **proj_cfg** in main.
     ```sh
     python run_op_projection.py
     ```
 
 
-## Todo
+### Todo
 1. Currently only cover single card perf projection, will support multi-card / multi-node.
 2. Will cover more models / operations.
