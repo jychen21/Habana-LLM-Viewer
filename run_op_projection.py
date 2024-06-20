@@ -29,8 +29,8 @@ class Analyzer:
                         proj_dict[device][type][dtype] = []
 
                         for m in self.m_list:
-                            for n in self.n_list:
-                                for k in self.k_list:
+                            for k in self.k_list:
+                                for n in self.n_list:
                                     proj_rst = compute.do_op_projection(
                                         op_name, device, type, dtype, m=m, n=n, k=k)
                                     proj_dict[device][type][dtype].append(
@@ -46,8 +46,8 @@ if __name__ == "__main__":
         "type_list": ["B"],  # ["C", "D"],
         "dtype_list": ["BF16"],
         "input": {
-            "m": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048],
-            "n": [4096],
+            "m": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+            "n": [14336],
             "k": [4096],
         },
     }

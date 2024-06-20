@@ -14,7 +14,18 @@ def proj_matmul(config: HardwareConfig, m, n, k):
     flops_mme = config.flops_mme
     flops_mme_factor = config.flops_mme_factor[-1]
     num_rounds = config.num_rounds
+    magic = magic_number = config.magic_number
     pipeline = config.pipeline
+    magic *= config.device_ratio[3]
+    if m > magic_number:
+        magic *= config.device_ratio[4]
+        flops_mme_factor = config.flops_mme_factor[1]
+        if m <= magic:
+            pipeline = config.device_ratio[-2]
+        elif m > magic:
+            pipeline = config.device_ratio[-1]
+        if m % magic != 0:
+            num_rounds = math.ceil(m / magic)
 
     params_in_input_a = m * k
     params_in_input_b = n * k

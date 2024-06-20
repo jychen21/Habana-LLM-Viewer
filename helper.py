@@ -599,7 +599,7 @@ def print_matmul_projection(op_name, proj_dict, to_csv=True):
                         proj_rst["latency"] * MicroSecs, 2)
                     math_ai = round(proj_rst["math_ai"], 2)
 
-                    throughput = round((1 / latency) / TFLOPS, 2)
+                    throughput = round(proj_rst["tops_roofline"] / TFLOPS, 2)
                     proj_data.append(
                         [op_name, f"{device}{type}", dtype, m,
                             n, k, math_ai, latency, throughput]
