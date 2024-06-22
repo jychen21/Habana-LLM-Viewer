@@ -12,9 +12,6 @@ from xformers.attn_bias_utils import create_attn_bias
 from vllm import _custom_ops as ops
 from vllm.utils import STR_DTYPE_TO_TORCH_DTYPE
 
-NUM_BLOCKS = 1024
-PARTITION_SIZE = 512
-
 
 def _generate_random_fp8(
     tensor: torch.Tensor,
@@ -62,6 +59,7 @@ def get_kv_cache_torch_dtype(
 def create_kv_caches_with_random(
     num_layers: int,
     num_seqs: int,
+    seq_len: int,
     num_kv_heads: int,
     head_size: int,
     cache_dtype: Optional[Union[str, torch.dtype]],
@@ -76,7 +74,7 @@ def create_kv_caches_with_random(
     torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
 
     scale = head_size**-0.5
-    key_cache_shape = (num_seqs, num_kv_heads, head_size)
+    key_cache_shape = (num_seqs, seq_len, num_kv_heads, head_size)
     key_caches: List[torch.Tensor] = []
     for _ in range(num_layers):
         key_cache = torch.empty(size=key_cache_shape,
@@ -91,7 +89,7 @@ def create_kv_caches_with_random(
                 f"Does not support key cache of type {cache_dtype}")
         key_caches.append(key_cache)
 
-    value_cache_shape = (num_seqs, num_kv_heads, head_size)
+    value_cache_shape = (num_seqs, seq_len, num_kv_heads, head_size)
     value_caches: List[torch.Tensor] = []
     for _ in range(num_layers):
         value_cache = torch.empty(size=value_cache_shape,
@@ -108,37 +106,27 @@ def create_kv_caches_with_random(
     return key_caches, value_caches
 
 
-def run_cuda_benchmark(version: str, input: tuple, num_iters: int, profile: bool = False) -> float:
-    output, query, key_cache, value_cache, num_kv_heads, scale, block_tables, seq_lens, block_size, \
-        max_seq_len, alibi_slopes, kv_cache_dtype, exp_sums, max_logits, tmp_output = input
+def run_cuda_benchmark(input: tuple, num_iters: int) -> float:
+    query, key_cache, value_cache = input
 
     torch.cuda.synchronize()
-    if profile:
-        torch.cuda.cudart().cudaProfilerStart()
     start_time = time.perf_counter()
 
-    # Using default kv_scale
-    kv_scale = 1.0
+    for _ in range(num_iters):
+        # https://facebookresearch.github.io/xformers/components/ops.html?highlight=memory_efficient#xformers.ops.fmha.memory_efficient_attention_forward
+        output = fmha.memory_efficient_attention_forward(
+            query, # [B, Mq, H, K], B: batch_size, Mq: seq_len_q, H: num_heads, K: head_dim
+            key_cache, # [B, Mkv, H, K], B: batch_size, Mkv: seq_len_kv, H: num_heads, K: head_dim
+            value_cache, # [B, Mkv, H, K], B: batch_size, Mkv: seq_len_kv, H: num_heads, K: head_dim
+            None, # – Bias to apply to the attention matrix - defaults to no masking. For common biases implemented efficiently in xFormers, see xformers.ops.fmha.attn_bias.AttentionBias. This can also be a torch.Tensor for an arbitrary mask (slower).
+        )
 
-    if version == "v2":
-        for _ in range(num_iters):
-            fd_output = fmha.memory_efficient_attention_forward(
-                query,
-                key_cache,
-                value_cache,
-                None,
-            )
-    else:
-        raise ValueError(f"Invalid version: {version}")
     torch.cuda.synchronize()
-
     end_time = time.perf_counter()
-    if profile:
-        torch.cuda.cudart().cudaProfilerStart()
     
-    bs = query.size(1)
-    seq_len = max_seq_len
-    heads_q = query.size(2) * query.size(-2)
+    bs = query.size(0)
+    seq_len = key_cache.size(1)
+    heads_q = query.size(2)
     heads_kv = key_cache.size(2)
     head_size = query.size(-1)
     type = "MHA" if heads_q == heads_kv else (
@@ -159,7 +147,6 @@ def main(
     num_kv_heads_list: int,
     head_size: int,
     use_alibi: bool,
-    block_size: int,
     dtype: torch.dtype,
     seed: int,
     do_profile: bool,
@@ -185,9 +172,10 @@ def main(
                     input_dict[query_key][seq_len][kv_key] = []
             for num_seqs in num_seqs_list:  # batch_size
                 scale = float(1.0 / (head_size**0.5))
-                query = torch.empty(num_seqs,
-                                    num_query_heads,
-                                    head_size,
+                query = torch.empty(num_seqs, # B
+                                    1, # Mq(Tq)
+                                    num_query_heads, # Hq(Mq)
+                                    head_size, # K
                                     dtype=dtype,
                                     device=device)
                 query.uniform_(-scale, scale)
@@ -203,37 +191,28 @@ def main(
                 max_seq_len = max(seq_lens)
                 seq_lens = torch.tensor(seq_lens, dtype=torch.int, device=device)
 
-                # Create the block tables.
-                max_num_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
-                block_tables = []
-                for _ in range(num_seqs):
-                    block_table = [
-                        random.randint(0, NUM_BLOCKS - 1)
-                        for _ in range(max_num_blocks_per_seq)
-                    ]
-                    block_tables.append(block_table)
-                block_tables = torch.tensor(block_tables, dtype=torch.int, device=device)
-
                 # Create the KV cache.
                 key_caches, value_caches = create_kv_caches_with_random(1,
-                                                                        num_seqs,
-                                                                        num_kv_heads,
-                                                                        head_size,
+                                                                        num_seqs, # B
+                                                                        max_seq_len, # Mkv(Tkv)
+                                                                        num_kv_heads, # Hkv(Mkv)
+                                                                        head_size, # K
                                                                         kv_cache_dtype,
                                                                         dtype,
                                                                         device=device)
                 key_cache, value_cache = key_caches[0], value_caches[0]
 
-                # Prepare for the paged attention kernel.
-                output = torch.empty_like(query)
-
-                heads_per_group = num_query_heads // num_kv_heads
-                query = query.view(1, query.size(0), num_kv_heads, heads_per_group, head_size)
-                key_cache = key_cache.view(1, key_cache.size(0), num_kv_heads, 1, head_size)
-                value_cache = value_cache.view(1, value_cache.size(0), num_kv_heads, 1, head_size)
+                print(query.shape, key_cache.shape, value_cache.shape)
+                B, Mq, Hq, K = query.size()
+                _, Mkv, Hkv, _ = key_cache.size()
+                heads_per_group = Hq // Hkv
                 if num_query_heads != num_kv_heads:
-                    key_cache = key_cache.expand(-1, -1, -1, heads_per_group, -1)
-                    value_cache = value_cache.expand(-1, -1, -1, heads_per_group, -1)
+                    query = query.view(B, Mq, Hkv, heads_per_group, K)
+                    key_cache = key_cache.view(B, Mkv, Hkv, 1, K)
+                    value_cache = value_cache.view(B, Mkv, Hkv, 1, K)
+                    key_cache = key_cache.expand(B, Mkv, Hkv, heads_per_group, K)
+                    value_cache = value_cache.expand(B, Mkv, Hkv, heads_per_group, K)
+                    print(query.shape, key_cache.shape, value_cache.shape)
 
                 attn_bias = create_attn_bias(
                                 None,
@@ -249,32 +228,9 @@ def main(
                                 op=fmha.decoder.FwOp,
                             )
 
-                input_dict[query_key][seq_len][kv_key].append([output, 
-                                                               query, 
+                input_dict[query_key][seq_len][kv_key].append([query, 
                                                                key_cache, 
-                                                               value_cache,
-                                                               num_kv_heads,
-                                                               scale,
-                                                               block_tables,
-                                                               seq_lens,
-                                                               block_size,
-                                                               max_seq_len,
-                                                               alibi_slopes,
-                                                               kv_cache_dtype])
-                if version == "v2":
-                    num_partitions = ((max_seq_len + PARTITION_SIZE - 1) // PARTITION_SIZE)
-                    tmp_output = torch.empty(
-                        size=(num_seqs, num_query_heads, num_partitions, head_size),
-                        dtype=output.dtype,
-                        device=output.device,
-                    )
-                    exp_sums = torch.empty(
-                        size=(num_seqs, num_query_heads, num_partitions),
-                        dtype=torch.float32,
-                        device=output.device,
-                    )
-                    max_logits = torch.empty_like(exp_sums)
-                    input_dict[query_key][seq_len][kv_key][-1].extend([exp_sums, max_logits, tmp_output])
+                                                               value_cache])
 
     print(f"Warming up...")
     for q, q_dict in input_dict.items():
@@ -284,12 +240,12 @@ def main(
             for k, k_list in s_dict.items():
                 print(f".........heads_kv={k[2:]}...")
                 for input in k_list:
-                    print(f"............bs={input[1].size(1)}...")
-                    run_cuda_benchmark(version, input, num_iters=3, profile=False)
+                    print(f"............bs={input[1].size(0)}...")
+                    run_cuda_benchmark(input, num_iters=3)
 
     if do_profile:
         print(f"Profiling Benchmark...")
-        name = f"FD_V2_BlockSize{block_size}"
+        name = f"FD"
         profiler = torch.profiler.profile(
             schedule=torch.profiler.schedule(
                 wait=0, warmup=3, active=2, repeat=0),
@@ -308,9 +264,8 @@ def main(
                     for k, k_list in s_dict.items():
                         print(f".........heads_kv={k[2:]}...")
                         for input in k_list:
-                            print(f"............bs={input[1].size(1)}...")
-                            run_cuda_benchmark(
-                                version, input, num_iters=1, profile=False)
+                            print(f"............bs={input[1].size(0)}...")
+                            run_cuda_benchmark(input, num_iters=1)
             profiler.step()
             print(f"Iteration_{i} Stop")
         profiler.stop()
@@ -327,13 +282,13 @@ def main(
                 for k, k_list in s_dict.items():
                     print(f".........heads_kv={k[2:]}...")
                     for input in k_list:
-                        print(f"............bs={input[1].size(1)}...")
+                        print(f"............bs={input[1].size(0)}...")
                         type, bs, seq_len, heads_q, heads_kv, head_size, duration = \
-                            run_cuda_benchmark(version, input, num_iters=100, profile=False)
+                            run_cuda_benchmark(input, num_iters=1)
                         item_list.append(
                             [type, "FP16/BF16", bs, 1, seq_len, head_size, heads_q, heads_kv, duration])
                         print(item_list[-1])
-        path = f"./benchmark_gpu_fa_{version}.csv"
+        path = f"./benchmark_gpu_fd.csv"
         with open(path, "w", newline="") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(item_list)
@@ -367,7 +322,6 @@ if __name__ == '__main__':
                         type=int,
                         choices=[64, 80, 96, 112, 128, 192, 256],
                         default=128)
-    parser.add_argument("--block-size", type=int, choices=[16, 32], default=16)
     parser.add_argument("--use-alibi", action="store_true")
     parser.add_argument("--dtype",
                         type=str,
@@ -396,7 +350,6 @@ if __name__ == '__main__':
         num_query_heads_list=args.num_query_heads_list,
         num_kv_heads_list=args.num_kv_heads_list,
         head_size=args.head_size,
-        block_size=args.block_size,
         use_alibi=args.use_alibi,
         dtype=STR_DTYPE_TO_TORCH_DTYPE[args.dtype],
         seed=args.seed,
