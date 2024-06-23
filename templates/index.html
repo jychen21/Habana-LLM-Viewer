@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Habana-Viewer</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            margin: 0;
+        }
+        h1, h2 {
+            text-align: center;
+        }
+        .content {
+            display: flex;
+            width: 100%;
+            justify-content: center;
+            align-items: center;
+            flex-grow: 1;
+        }
+        .form-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            padding: 20px;
+            border-left: 2px solid #ccc;
+        }
+        .slider-container, .dropdown-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+        }
+        label {
+            margin-right: 10px;
+        }
+        input[type="range"] {
+            width: 300px;
+            margin: 0 10px;
+        }
+        pre {
+            text-align: left;
+            width: 80%;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .center {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        img {
+            margin-top: 20px;
+            max-width: 80%;
+            height: auto;
+        }
+        /* Custom styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #ddd;
+            margin-top: 20px;
+        }
+
+        table th, table td {
+            padding: 8px;
+            text-align: left;
+        }
+
+        table th {
+            background-color: #f2f2f2;
+            color: #333;
+        }
+
+        table tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+
+        table tr:hover {
+            background-color: #f1f1f1;
+            cursor: pointer;
+        }
+    </style>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+    <h1>Habana-Viewer</h1>
+
+    <div class="content">
+        <div class="center">
+            <h2>Roofline:</h2>
+            <!-- Placeholder image tag for the Roofline model -->
+            <img id="roofline" src="/plot" alt="Roofline Model">
+            <h2>Projection:</h2>
+            <div id="projection"></div> <!-- Projection table will be inserted here -->
+        </div>
+        <div class="form-container">
+            <form id="projectionForm" method="POST">
+                <div class="dropdown-container">
+                    <label for="device">Device:</label>
+                    <select id="device" name="device">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="dropdown-container">
+                    <label for="device_type">Device Type:</label>
+                    <select id="device_type" name="device_type">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="dropdown-container">
+                    <label for="model">Model:</label>
+                    <select id="model" name="model">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="dropdown-container">
+                    <label for="data_type">Data Type:</label>
+                    <select id="data_type" name="data_type">
+                        <!-- Options will be populated dynamically -->
+                    </select>
+                </div>
+                <div class="slider-container">
+                    <label for="batch_size">Batch Size:</label>
+                    <input type="range" id="batch_size" name="batch_size" min="1" max="512" value="64" oninput="this.nextElementSibling.value = this.value">
+                    <output>64</output>
+                </div>
+                <div class="slider-container">
+                    <label for="context_input">Context Input:</label>
+                    <input type="range" id="context_input" name="context_input" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
+                    <output>512</output>
+                </div>
+                <div class="slider-container">
+                    <label for="context_output">Context Output:</label>
+                    <input type="range" id="context_output" name="context_output" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
+                    <output>1024</output>
+                </div>
+                <div class="slider-container">
+                    <label for="kvcache_bucket">KVCache Bucket:</label>
+                    <input type="range" id="kvcache_bucket" name="kvcache_bucket" min="256" max="1024" value="256" step="256" oninput="this.nextElementSibling.value = this.value">
+                    <output>256</output>
+                </div>
+                <button type="submit">Run Projection</button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        $(document).ready(function() {
+            // Fetch choices for devices, device types, models, and data types
+            $.get('/choices', function(data) {
+                // Populate device choices
+                var deviceSelect = $('#device');
+                data.devices.forEach(function(device, index) {
+                    deviceSelect.append(new Option(device, device, index === 0));
+                });
+                // Set the desired default value
+                deviceSelect.val('IntelGaudi2');
+
+                // Populate device type choices
+                var deviceTypeSelect = $('#device_type');
+                data.device_types.forEach(function(device_type, index) {
+                    deviceTypeSelect.append(new Option(device_type, device_type, index === 0));
+                });
+                // Set the desired default value
+                deviceTypeSelect.val('B');
+                
+                // Populate model choices
+                var modelSelect = $('#model');
+                data.models.forEach(function(model, index) {
+                    modelSelect.append(new Option(model, model, index === 1));
+                });
+                // Set the desired default value
+                modelSelect.val('Llama2-13B');
+
+                // Populate data type choices
+                var dataTypeSelect = $('#data_type');
+                data.data_types.forEach(function(data_type, index) {
+                    dataTypeSelect.append(new Option(data_type, data_type, index === 2));
+                });
+                // Set the desired default value
+                dataTypeSelect.val('BF16');
+            });
+            
+            // Function to update the data table
+            function updateData() {
+                $.get('/data', function(data) {
+                    var tableHtml = '<table><thead><tr>';
+                    var columns = Object.keys(data[0]); // Assuming all objects have the same keys
+
+                    // Generate table headers
+                    columns.forEach(function(column) {
+                        tableHtml += '<th>' + column + '</th>';
+                    });
+                    tableHtml += '</tr></thead><tbody>';
+
+                        // Generate table rows
+                    data.forEach(function(item) {
+                        tableHtml += '<tr>';
+                        columns.forEach(function(column) {
+                            tableHtml += '<td>' + item[column] + '</td>';
+                        });
+                        tableHtml += '</tr>';
+                    });
+
+                    tableHtml += '</tbody></table>';
+                    $('#projection').html(tableHtml); // Insert HTML into the projection div
+                });
+            }
+            // Initial update of data table
+            updateData();
+            
+            // Function to update the Roofline plot image
+            function updateRoofline() {
+                // $('#roofline').attr('src', '{{ url_for("roofline") }}?' + new Date().getTime());
+                $('#roofline').attr('src', '/plot?' + new Date().getTime());
+            }
+            // Call updateRooflinePlot initially
+            updateRoofline();
+
+            $('#projectionForm').submit(function(event) {
+                event.preventDefault(); // Prevent default form submission
+
+                var formData = $(this).serialize(); // Serialize form data
+                
+                // Make AJAX request to /roofline
+                $.ajax({
+                    url: '/roofline',
+                    method: 'POST',
+                    data: formData,
+                    success: function(response) {
+                        // Handle success of /roofline (e.g., update plot)
+                        updateRoofline(); // Update roofline plot
+                        // $('#Roofline').attr('src', '/roofline?' + new Date().getTime());
+                        console.log('Roofline data submitted successfully.');
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle error of /roofline
+                        console.error('Error in /roofline:', error);
+                        alert('An error occurred while generating roofline.');
+                    }
+                });
+
+                // Make AJAX request to /run_projection
+                $.ajax({
+                    url: '/run_projection',
+                    method: 'POST',
+                    data: formData,
+                    success: function(response) {
+                        // Handle success of /run_projection (e.g., update data table)
+                        updateData(); // Update data table
+                        updateRoofline(); // Update roofline plot
+                        console.log('Projection data submitted successfully.');
+                    },
+                    error: function(xhr, status, error) {
+                        // Handle error of /run_projection
+                        console.error('Error in /run_projection:', error);
+                        alert('An error occurred while running projection.');
+                    }
+                });
+            });
+        });
+    </script>
+</body>
+</html>

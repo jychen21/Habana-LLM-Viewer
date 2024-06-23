@@ -58,6 +58,7 @@ MegaBytes = 1024 * 1024
 GigaParam = 1024 * 1024 * 1024
 MegaParam = 1024 * 1024
 TFLOPS = 1e12
+MilliSecs = 1e3
 MicroSecs = 1e6
 T_BW = 1e12
 

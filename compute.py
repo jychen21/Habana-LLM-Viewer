@@ -490,6 +490,22 @@ def proj_single_layer(config):
     seq_len_q = config.input_config.seq_len_q
     seq_len_kv = config.input_config.seq_len_kv
 
+    num_ops = qkvo_proj["operations"]
+    num_ops += attn_items[0]["operations"]
+    num_ops += attn_items[-1]["operations"]
+    for item in ffn_items:
+        if item is not None:
+            num_ops += item["operations"]
+
+    num_bytes = qkvo_proj["size"]
+    num_bytes += attn_items[0]["size"]
+    num_bytes += attn_items[-1]["size"]
+    for item in ffn_items:
+        if item is not None:
+            num_bytes += item["size"]
+
+    math_ai = num_ops / num_bytes
+
     single_layer_items = {
         "hidden_size": hidden_size,
         "inter_size": inter_size,
@@ -501,6 +517,9 @@ def proj_single_layer(config):
         "qkvo": qkvo_proj,
         "attn": attn_items,
         "ffn": ffn_items,
+        "operations": num_ops,
+        "size": num_bytes,
+        "math_ai": math_ai
     }
 
     return runtime_single_layer, single_layer_items
@@ -528,6 +547,8 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
 
     proj_rst = {}
     proj_decoding_steps = []
+    proj_decoding_latency = []
+    proj_decoding_ai = []
 
     for step in range(output):
         if step == 0:
@@ -546,8 +567,15 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
                          num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket, **kwargs)
             proj_decoding_steps.append(proj_decoder(cfg))
+            proj_decoding_latency.append(proj_decoding_steps[-1][0])
+            proj_decoding_ai.append(proj_decoding_steps[-1][1]["math_ai"])
 
     proj_rst["decode"] = proj_decoding_steps
+
+    overall_ai = round(((proj_rst["prefill"][1]["math_ai"] + sum(proj_decoding_ai)) /
+                        (len(proj_decoding_ai) + 1)), 2)
+
+    proj_rst["arithmetic_intensity"] = overall_ai
 
     return proj_rst
 

@@ -91,7 +91,11 @@ FFN Projection (
     ```sh
     python run_model_projection.py
     ```
-<!-- 2. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
+2. Simpily run with **[python habana_viewer_server.py](./habana_viewer_server.py)** and the results will show up on localhost.
+    ```sh
+    python python habana_viewer_server.py
+    ```
+<!-- 3. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
 #### Operation Projection
 1. Simpily run with **[run_op_projection.py](./run_op_projection.py)** and the results will be saved to folder "data/operation", same with model projection, one can modify **proj_cfg** in main.
     ```sh
