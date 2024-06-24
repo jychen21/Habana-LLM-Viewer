@@ -20,20 +20,18 @@
         }
         .content {
             display: flex;
-            flex-wrap: wrap;
             width: 100%;
             justify-content: space-around;
             align-items: flex-start;
             margin-bottom: 40px;
         }
         .form-container {
-            display: flex;
-            flex-direction: column;
-            align-items: flex-start;
+            flex: 1;
             padding: 20px;
             border-left: 2px solid #ccc;
             background: #fff;
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            margin-right: 20px;
         }
         .slider-container, .dropdown-container {
             display: flex;
@@ -50,10 +48,10 @@
             margin: 0 10px;
         }
         .center {
+            flex: 2;
             display: flex;
             flex-direction: column;
             align-items: center;
-            flex: 1;
         }
         img {
             margin-top: 20px;
@@ -196,7 +194,6 @@
             function updateData() {
                 $.get('/data', function(data) {
                     var tableHtml = '<table><thead><tr>';
-                    // var columns = Object.keys(data[0]);
 
                     columnOrder.forEach(function(column) {
                         tableHtml += '<th>' + column + '</th>';
@@ -219,7 +216,7 @@
 
             function updateRoofline() {
                 $.get('/plot', function(data) {
-                    $('#roofline').html(data); // Insert HTML into the roofline div
+                    $('#roofline').html(data);
                 });
             }
             updateRoofline();

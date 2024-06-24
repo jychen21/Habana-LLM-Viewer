@@ -34,6 +34,15 @@ def choices():
 @app.route('/plot', methods=['GET'])
 def plot():
     global roofline_data
+    device = "IntelGaudi2"
+    device_type = "B"
+    model = "Llama2-13B"
+    data_type = "BF16"
+    cfg = config.HardwareConfig(device, device_type, data_type)
+    peak_flops = cfg.flops_mme
+    peak_bandwidth = cfg.hbm_bandwidth
+    arithmetic_intensity = peak_flops / peak_bandwidth
+    attainable_tops = peak_flops
     if roofline_data:
         device = roofline_data["device"]
         device_type = roofline_data["device_type"]
@@ -98,7 +107,6 @@ def roofline():
     model = request.form.get('model', 'Llama2-7B')
     data_type = request.form.get('data_type', 'BF16')
     cfg = config.HardwareConfig(device, device_type, data_type)
-    print(device, device_type, data_type)
 
     peak_flops = cfg.flops_mme
     peak_bandwidth = cfg.hbm_bandwidth
@@ -106,15 +114,6 @@ def roofline():
     operational_intensity = np.logspace(-3, 3, 512)
     roofline = np.minimum(peak_flops, peak_bandwidth * operational_intensity)
 
-    plt.figure(figsize=(10, 6))
-    plt.loglog(operational_intensity, roofline,
-               label=f'{device}{device_type} Roofline')
-    plt.xlabel('Arithmetic Intensity (FLOPs/Byte)')
-    plt.ylabel('Performance (FLOPs/sec)')
-    plt.title(f'Roofline Model for {device}{device_type}')
-    plt.legend()
-
-    # Plot the performance data
     arithmetic_intensity = peak_flops / peak_bandwidth
     attainable_tops = peak_flops
     if projection_data:

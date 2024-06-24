@@ -589,6 +589,21 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
         k = kwargs.get('k', 4096)
 
         proj_rst = proj_matmul(cfg, m, n, k)
+    elif op_name == "FlashAttentionV1":
+        block_size = kwargs.get("block_size", 1024)
+        num_heads_q = kwargs.get("heads_q", 32)
+        num_heads_kv = kwargs.get("heads_kv", 32)
+        head_dim = kwargs.get("head_dim", 128)
+        bs = kwargs.get("bs", 1)
+        seqlen_kv = kwargs.get("seqlen_kv", 4096)
+
+        proj_rst = proj_flash_attn_v1(cfg,
+                                      block_size,
+                                      num_heads_q,
+                                      num_heads_kv,
+                                      head_dim,
+                                      bs,
+                                      seqlen_kv)
     elif op_name == "PagedAttentionV1":
         num_blocks = kwargs.get("num_blocks", 1024)
         block_size = kwargs.get("block_size", 128)
@@ -600,21 +615,6 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
 
         proj_rst = proj_paged_attn_v1(cfg,
                                       num_blocks,
-                                      block_size,
-                                      num_heads_q,
-                                      num_heads_kv,
-                                      head_dim,
-                                      bs,
-                                      seqlen_kv)
-    elif op_name == "FlashAttentionV1":
-        block_size = kwargs.get("block_size", 1024)
-        num_heads_q = kwargs.get("heads_q", 32)
-        num_heads_kv = kwargs.get("heads_kv", 32)
-        head_dim = kwargs.get("head_dim", 128)
-        bs = kwargs.get("bs", 1)
-        seqlen_kv = kwargs.get("seqlen_kv", 4096)
-
-        proj_rst = proj_flash_attn_v1(cfg,
                                       block_size,
                                       num_heads_q,
                                       num_heads_kv,

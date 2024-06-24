@@ -674,3 +674,11 @@ def print_matmul_projection(op_name, proj_dict, to_csv=True):
                 with open(f"{op_dir}/{device}{type}_projection.csv", "w", newline="") as csvfile:
                     writer = csv.writer(csvfile)
                     writer.writerows(proj_data)
+
+
+def print_flashattn_projection(op_name, proj_dict, to_csv=True):
+    pass
+
+
+def print_pagedattn_projection(op_name, proj_dict, to_csv=True):
+    pass

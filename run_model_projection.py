@@ -92,19 +92,22 @@ class Analyzer:
     def analyze_output(self, model, device, type, pp, tp, dtype, input):
         proj_output = {}
         for output in self.output_list:
-            proj_output[output] = self.analyze_bs(model, device, type, pp, tp, dtype, input, output)
+            proj_output[output] = self.analyze_bs(
+                model, device, type, pp, tp, dtype, input, output)
         return proj_output
 
     def analyze_input(self, model, device, type, pp, tp, dtype):
         proj_input = {}
         for input in self.input_list:
-            proj_input[input] = self.analyze_output(model, device, type, pp, tp, dtype, input)
+            proj_input[input] = self.analyze_output(
+                model, device, type, pp, tp, dtype, input)
         return proj_input
 
     def analyze_dtype(self, model, device, type, pp, tp):
         proj_dtype = {}
         for dtype in self.dtype_list:
-            proj_dtype[dtype] = self.analyze_input(model, device, type, pp, tp, dtype)
+            proj_dtype[dtype] = self.analyze_input(
+                model, device, type, pp, tp, dtype)
         return proj_dtype
 
     def analyze_tp(self, model, device, type, pp):
@@ -143,8 +146,8 @@ class Analyzer:
         return self.analyze_model(to_csv, plot)
 
 
-def main(device, device_type, model, data_type, batch_size,
-         context_input, context_output, kvcache_bucket):
+def main(device, device_type, model, data_type, batch_size, context_input,
+         context_output, kvcache_bucket, enable_vec_bmm):
     '''
     proj_cfg = {
         "device_list": [device],
@@ -163,7 +166,7 @@ def main(device, device_type, model, data_type, batch_size,
         "optims": {
             "kvcache_bucket": kvcache_bucket,
             "flash_attention": False,  # Todo
-            "enable_vec_bmm": True,
+            "enable_vec_bmm": enable_vec_bmm,
         }
     }
     '''
@@ -191,7 +194,6 @@ def main(device, device_type, model, data_type, batch_size,
     }
     analyzer = Analyzer(proj_cfg)
     analyzer.analyze(False, False)
-
 
 
 if __name__ == "__main__":
@@ -226,6 +228,7 @@ if __name__ == "__main__":
                         type=int,
                         choices=[256, 512, 1024],
                         default=256)
+    parser.add_argument("--vec-bmm", action="store_true")
     args = parser.parse_args()
 
     main(
@@ -237,4 +240,5 @@ if __name__ == "__main__":
         context_input=args.context_input,
         context_output=args.context_output,
         kvcache_bucket=args.kvcache_bucket,
+        enable_vec_bmm=args.vec_bmm,
     )
