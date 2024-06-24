@@ -57,7 +57,7 @@ def plot():
         fig.update_layout(
             xaxis=dict(type='log', title='Arithmetic Intensity (FLOPs/Byte)'),
             yaxis=dict(type='log', title='Performance (FLOPs/sec)'),
-            title=f'Roofline Model for {device}{device_type}'
+            title=f'Roofline Model for {device}{device_type}_{data_type}'
         )
 
         plot_html = fig.to_html(full_html=False)
