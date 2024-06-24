@@ -77,59 +77,75 @@ class Analyzer:
         self.kvcache_bucket = opt_config.get("kvcache_bucket", False)
         self.enable_vec_bmm = opt_config.get("enable_vec_bmm", False)
 
-    # def analyze_model(self, model_name):
+    def analyze_bs(self, model, device, type, pp, tp, dtype, input, output):
+        proj_bs = []
+        for bs in tqdm(self.bs_list):
+            compute_projection = compute.do_model_projection(
+                model, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
+            memory_projection = memory.do_model_projection(
+                model, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
+            proj_rst = {
+                "compute": compute_projection, "memory": memory_projection}
+            proj_bs.append((bs, proj_rst))
+        return proj_bs
 
-    # def analyze_device(self, device):
+    def analyze_output(self, model, device, type, pp, tp, dtype, input):
+        proj_output = {}
+        for output in self.output_list:
+            proj_output[output] = self.analyze_bs(model, device, type, pp, tp, dtype, input, output)
+        return proj_output
 
-    # def analyze_device_type(self, device_type):
+    def analyze_input(self, model, device, type, pp, tp, dtype):
+        proj_input = {}
+        for input in self.input_list:
+            proj_input[input] = self.analyze_output(model, device, type, pp, tp, dtype, input)
+        return proj_input
+
+    def analyze_dtype(self, model, device, type, pp, tp):
+        proj_dtype = {}
+        for dtype in self.dtype_list:
+            proj_dtype[dtype] = self.analyze_input(model, device, type, pp, tp, dtype)
+        return proj_dtype
+
+    def analyze_tp(self, model, device, type, pp):
+        proj_tp = {}
+        for tp in self.tp_list:
+            proj_tp[tp] = self.analyze_dtype(model, device, type, pp, tp)
+        return proj_tp
+
+    def analyze_pp(self, model, device, type):
+        proj_pp = {}
+        for pp in self.pp_list:
+            proj_pp[pp] = self.analyze_tp(model, device, type, pp)
+        return proj_pp
+
+    def analyze_type(self, model, device):
+        proj_type = {}
+        for type in self.type_list:
+            proj_type[type] = self.analyze_pp(model, device, type)
+        return proj_type
+
+    def analyze_device(self, model):
+        proj_device = {}
+        for device in self.device_list:
+            proj_device[device] = self.analyze_type(model, device)
+        return proj_device
+
+    def analyze_model(self, to_csv=False, plot=False):
+        proj_model = {}
+        for model in self.model_list:
+            proj_model[model] = self.analyze_device(model)
+            helper.print_projection(
+                model, proj_model[model], self.kvcache_bucket, self.bs_list, to_csv, plot)
+        return proj_model
 
     def analyze(self, to_csv=True, plot=True):
-        proj_model = {}
-        for model_name in self.model_list:
-            proj_dict = {}
-
-            for device in self.device_list:
-                proj_dict[device] = {}
-
-                for type in self.type_list:
-                    proj_dict[device][type] = {}
-
-                    for pp in self.pp_list:
-                        proj_dict[device][type][pp] = {}
-
-                        for tp in self.tp_list:
-                            proj_dict[device][type][pp][tp] = {}
-
-                            for dtype in self.dtype_list:
-                                proj_dict[device][type][pp][tp][dtype] = {}
-
-                                for input in self.input_list:
-                                    proj_dict[device][type][pp][tp][dtype][input] = {
-                                    }
-
-                                    for output in self.output_list:
-                                        proj_dict[device][type][pp][tp][dtype][input][output] = [
-                                        ]
-
-                                        for bs in tqdm(self.bs_list):
-                                            compute_projection = compute.do_model_projection(
-                                                model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
-                                            memory_projection = memory.do_model_projection(
-                                                model_name, device, type, pp, tp, dtype, input, output, bs, self.kvcache_bucket, enable_vec_bmm=self.enable_vec_bmm)
-                                            proj_rst = {
-                                                "compute": compute_projection, "memory": memory_projection}
-                                            proj_dict[device][type][pp][tp][dtype][input][output].append(
-                                                (bs, proj_rst))
-
-            helper.print_projection(
-                model_name, proj_dict, self.kvcache_bucket, self.bs_list, to_csv, plot)
-            proj_model[model_name] = proj_dict
-
-        return proj_model
+        return self.analyze_model(to_csv, plot)
 
 
 def main(device, device_type, model, data_type, batch_size,
          context_input, context_output, kvcache_bucket):
+    '''
     proj_cfg = {
         "device_list": [device],
         "type_list": [device_type],
@@ -150,31 +166,32 @@ def main(device, device_type, model, data_type, batch_size,
             "enable_vec_bmm": True,
         }
     }
+    '''
+    proj_cfg = {
+        "device_list": ["IntelGaudi2"],
+        "type_list": ["B"],  # ["C", "D"],
+        # ["Llama2-7B", "Llama2-13B", "Mixtral-8x7B", "GLaM-1.2T"]
+        "model_list": ["Llama2-7B", "Llama3-8B"],
+        "dtype_list": ["BF16"],
+        "parallel": {
+            "pp_list": [1],
+            "tp_list": [1],  # [1, 2, 4, 8, 16]
+        },
+        "context": {
+            "input_list": [512, 1024, 2048],  # 32000
+            "output_list": [512],
+        },
+        # [1] + [i for i in range(2, 257, 2)],
+        "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
+        "optims": {
+            "kvcache_bucket": 256,  # None, 1, or >= 256
+            "flash_attention": False,  # Todo
+            "enable_vec_bmm": True,
+        }
+    }
     analyzer = Analyzer(proj_cfg)
     analyzer.analyze(False, False)
 
-    # proj_cfg = {
-    #     "device_list": ["IntelGaudi2"],
-    #     "type_list": ["B"],  # ["C", "D"],
-    #     # ["Llama2-7B", "Llama2-13B", "Mixtral-8x7B", "GLaM-1.2T"]
-    #     "model_list": ["Llama2-7B", "Llama3-8B"],
-    #     "dtype_list": ["BF16"],
-    #     "parallel": {
-    #         "pp_list": [1],
-    #         "tp_list": [1],  # [1, 2, 4, 8, 16]
-    #     },
-    #     "context": {
-    #         "input_list": [512, 1024, 2048],  # 32000
-    #         "output_list": [512],
-    #     },
-    #     # [1] + [i for i in range(2, 257, 2)],
-    #     "bs_list": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512],
-    #     "optims": {
-    #         "kvcache_bucket": 256,  # None, 1, or >= 256
-    #         "flash_attention": False,  # Todo
-    #         "enable_vec_bmm": True,
-    #     }
-    # }
 
 
 if __name__ == "__main__":

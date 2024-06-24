@@ -3,6 +3,7 @@ import json
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 import pandas as pd
 import io
 import subprocess
@@ -47,6 +48,22 @@ def plot():
         roofline = np.minimum(
             peak_flops, peak_bandwidth * operational_intensity)
 
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=operational_intensity, y=roofline,
+                      mode='lines', name=f'{device}{device_type} Roofline'))
+        fig.add_trace(go.Scatter(x=[arithmetic_intensity], y=[attainable_tops], mode='markers+text', text=[
+                      f"Model: {model}<br>\nAI: {arithmetic_intensity:.2f}FLOPS/Bytes<br>\nTops: {attainable_tops/config.TFLOPS:.2f}TFLOPs"], textposition="top left", marker=dict(color='red')))
+
+        fig.update_layout(
+            xaxis=dict(type='log', title='Arithmetic Intensity (FLOPs/Byte)'),
+            yaxis=dict(type='log', title='Performance (FLOPs/sec)'),
+            title=f'Roofline Model for {device}{device_type}'
+        )
+
+        plot_html = fig.to_html(full_html=False)
+
+        return plot_html
+        '''
         plt.figure(figsize=(10, 6))
         plt.loglog(operational_intensity, roofline,
                    label=f'{device}{device_type}_{data_type} Roofline')
@@ -67,8 +84,9 @@ def plot():
         plt.savefig(img, format='png')
         img.seek(0)
         return send_file(img, mimetype='image/png')
+        '''
     else:
-        return "No JSON files found in the data/model directory", 404
+        return "No Roofline Data", 404
 
 
 @app.route('/roofline', methods=['POST'])

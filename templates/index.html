@@ -9,18 +9,22 @@
             flex-direction: column;
             align-items: center;
             font-family: Arial, sans-serif;
-            height: 100vh;
             margin: 0;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: #f8f9fa;
         }
         h1, h2 {
             text-align: center;
+            margin-bottom: 20px;
         }
         .content {
             display: flex;
+            flex-wrap: wrap;
             width: 100%;
-            justify-content: center;
-            align-items: center;
-            flex-grow: 1;
+            justify-content: space-around;
+            align-items: flex-start;
+            margin-bottom: 40px;
         }
         .form-container {
             display: flex;
@@ -28,63 +32,71 @@
             align-items: flex-start;
             padding: 20px;
             border-left: 2px solid #ccc;
+            background: #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         .slider-container, .dropdown-container {
             display: flex;
             align-items: center;
             margin: 10px 0;
+            width: 100%;
         }
         label {
             margin-right: 10px;
+            min-width: 100px;
         }
         input[type="range"] {
-            width: 300px;
+            flex: 1;
             margin: 0 10px;
-        }
-        pre {
-            text-align: left;
-            width: 80%;
-            white-space: pre-wrap;
-            word-wrap: break-word;
         }
         .center {
             display: flex;
             flex-direction: column;
             align-items: center;
+            flex: 1;
         }
         img {
             margin-top: 20px;
-            max-width: 80%;
+            max-width: 100%;
             height: auto;
         }
-        /* Custom styles */
         table {
             width: 100%;
             border-collapse: collapse;
             border: 1px solid #ddd;
             margin-top: 20px;
+            background: #fff;
         }
-
         table th, table td {
             padding: 8px;
             text-align: left;
         }
-
         table th {
             background-color: #f2f2f2;
             color: #333;
         }
-
         table tr:nth-child(even) {
             background-color: #f9f9f9;
         }
-
         table tr:hover {
             background-color: #f1f1f1;
             cursor: pointer;
         }
+        button {
+            padding: 10px 20px;
+            margin-top: 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
     </style>
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 </head>
 <body>
     <h1>Habana-Viewer</h1>
@@ -92,8 +104,7 @@
     <div class="content">
         <div class="center">
             <h2>Roofline:</h2>
-            <!-- Placeholder image tag for the Roofline model -->
-            <img id="roofline" src="/plot" alt="Roofline Model">
+            <div id="roofline"></div> <!-- Placeholder for Plotly Roofline Model -->
             <h2>Projection:</h2>
             <div id="projection"></div> <!-- Projection table will be inserted here -->
         </div>
@@ -131,7 +142,7 @@
                 <div class="slider-container">
                     <label for="context_input">Context Input:</label>
                     <input type="range" id="context_input" name="context_input" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
-                    <output>512</output>
+                    <output>1024</output>
                 </div>
                 <div class="slider-container">
                     <label for="context_output">Context Output:</label>
@@ -150,113 +161,98 @@
 
     <script>
         $(document).ready(function() {
-            // Fetch choices for devices, device types, models, and data types
             $.get('/choices', function(data) {
-                // Populate device choices
                 var deviceSelect = $('#device');
                 data.devices.forEach(function(device, index) {
                     deviceSelect.append(new Option(device, device, index === 0));
                 });
-                // Set the desired default value
                 deviceSelect.val('IntelGaudi2');
 
-                // Populate device type choices
                 var deviceTypeSelect = $('#device_type');
                 data.device_types.forEach(function(device_type, index) {
                     deviceTypeSelect.append(new Option(device_type, device_type, index === 0));
                 });
-                // Set the desired default value
                 deviceTypeSelect.val('B');
-                
-                // Populate model choices
+
                 var modelSelect = $('#model');
                 data.models.forEach(function(model, index) {
                     modelSelect.append(new Option(model, model, index === 1));
                 });
-                // Set the desired default value
                 modelSelect.val('Llama2-13B');
 
-                // Populate data type choices
                 var dataTypeSelect = $('#data_type');
                 data.data_types.forEach(function(data_type, index) {
                     dataTypeSelect.append(new Option(data_type, data_type, index === 2));
                 });
-                // Set the desired default value
                 dataTypeSelect.val('BF16');
             });
-            
-            // Function to update the data table
+
+            var columnOrder = [
+                "Model", "Device", "PP", "TP", "DType", "Input", "Output", 
+                "BS", "KVCacheBucket", "AI", "Prefill(ms)", "DecodeMin(ms)", 
+                "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"
+            ];
+
             function updateData() {
                 $.get('/data', function(data) {
                     var tableHtml = '<table><thead><tr>';
-                    var columns = Object.keys(data[0]); // Assuming all objects have the same keys
+                    // var columns = Object.keys(data[0]);
 
-                    // Generate table headers
-                    columns.forEach(function(column) {
+                    columnOrder.forEach(function(column) {
                         tableHtml += '<th>' + column + '</th>';
                     });
                     tableHtml += '</tr></thead><tbody>';
 
-                        // Generate table rows
                     data.forEach(function(item) {
                         tableHtml += '<tr>';
-                        columns.forEach(function(column) {
+                            columnOrder.forEach(function(column) {
                             tableHtml += '<td>' + item[column] + '</td>';
                         });
                         tableHtml += '</tr>';
                     });
 
                     tableHtml += '</tbody></table>';
-                    $('#projection').html(tableHtml); // Insert HTML into the projection div
+                    $('#projection').html(tableHtml);
                 });
             }
-            // Initial update of data table
             updateData();
-            
-            // Function to update the Roofline plot image
+
             function updateRoofline() {
-                // $('#roofline').attr('src', '{{ url_for("roofline") }}?' + new Date().getTime());
-                $('#roofline').attr('src', '/plot?' + new Date().getTime());
+                $.get('/plot', function(data) {
+                    $('#roofline').html(data); // Insert HTML into the roofline div
+                });
             }
-            // Call updateRooflinePlot initially
             updateRoofline();
 
             $('#projectionForm').submit(function(event) {
-                event.preventDefault(); // Prevent default form submission
+                event.preventDefault();
 
-                var formData = $(this).serialize(); // Serialize form data
+                var formData = $(this).serialize();
                 
-                // Make AJAX request to /roofline
                 $.ajax({
                     url: '/roofline',
                     method: 'POST',
                     data: formData,
                     success: function(response) {
-                        // Handle success of /roofline (e.g., update plot)
-                        updateRoofline(); // Update roofline plot
-                        // $('#Roofline').attr('src', '/roofline?' + new Date().getTime());
+                        updateRoofline();
                         console.log('Roofline data submitted successfully.');
                     },
                     error: function(xhr, status, error) {
-                        // Handle error of /roofline
                         console.error('Error in /roofline:', error);
                         alert('An error occurred while generating roofline.');
                     }
                 });
 
-                // Make AJAX request to /run_projection
                 $.ajax({
                     url: '/run_projection',
                     method: 'POST',
                     data: formData,
                     success: function(response) {
-                        // Handle success of /run_projection (e.g., update data table)
-                        updateData(); // Update data table
-                        updateRoofline(); // Update roofline plot
+                        updateData();
+                        updateRoofline();
                         console.log('Projection data submitted successfully.');
                     },
                     error: function(xhr, status, error) {
-                        // Handle error of /run_projection
                         console.error('Error in /run_projection:', error);
                         alert('An error occurred while running projection.');
                     }
