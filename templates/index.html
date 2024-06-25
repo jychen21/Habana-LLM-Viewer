@@ -33,6 +33,20 @@
             box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
             margin-right: 20px;
         }
+        .slider-container, .dropdown-container, .range-container {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            width: 100%;
+        }
+        .form-section {
+            margin-bottom: 20px;
+        }
+        .form-section h3 {
+            margin-bottom: 10px;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 5px;
+        }
         .slider-container, .dropdown-container {
             display: flex;
             align-items: center;
@@ -46,6 +60,12 @@
         input[type="range"] {
             flex: 1;
             margin: 0 10px;
+        }
+        .range-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            width: 100%;
         }
         .center {
             flex: 2;
@@ -108,51 +128,101 @@
         </div>
         <div class="form-container">
             <form id="projectionForm" method="POST">
-                <div class="dropdown-container">
-                    <label for="device">Device:</label>
-                    <select id="device" name="device">
-                        <!-- Options will be populated dynamically -->
-                    </select>
+                <div class="form-section">
+                    <h3>Basic Section</h3>
+                    <div class="dropdown-container">
+                        <label for="device">Device:</label>
+                        <select id="device" name="device">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="dropdown-container">
+                        <label for="device_type">Device Type:</label>
+                        <select id="device_type" name="device_type">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="dropdown-container">
+                        <label for="data_type">Data Type:</label>
+                        <select id="data_type" name="data_type">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
                 </div>
-                <div class="dropdown-container">
-                    <label for="device_type">Device Type:</label>
-                    <select id="device_type" name="device_type">
-                        <!-- Options will be populated dynamically -->
-                    </select>
+                <div class="form-section">
+                    <h3>Model Section</h3>
+                    <div class="dropdown-container">
+                        <label for="model">Model:</label>
+                        <select id="model" name="model">
+                            <!-- Options will be populated dynamically -->
+                        </select>
+                    </div>
+                    <div class="slider-container">
+                        <label for="batch_size">Batch Size:</label>
+                        <input type="range" id="batch_size" name="batch_size" min="1" max="512" value="64" oninput="this.nextElementSibling.value = this.value">
+                        <output>64</output>
+                    </div>
+                    <div class="slider-container">
+                        <label for="context_input">Context Input:</label>
+                        <input type="range" id="context_input" name="context_input" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
+                        <output>1024</output>
+                    </div>
+                    <div class="slider-container">
+                        <label for="context_output">Context Output:</label>
+                        <input type="range" id="context_output" name="context_output" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
+                        <output>1024</output>
+                    </div>
+                    <div class="slider-container">
+                        <label for="kvcache_bucket">KVCache Bucket:</label>
+                        <input type="range" id="kvcache_bucket" name="kvcache_bucket" min="256" max="1024" value="256" step="256" oninput="this.nextElementSibling.value = this.value">
+                        <output>256</output>
+                    </div>
+                    <button type="submit" id="runModelProjection">Run Model Projection</button>
                 </div>
-                <div class="dropdown-container">
-                    <label for="model">Model:</label>
-                    <select id="model" name="model">
-                        <!-- Options will be populated dynamically -->
-                    </select>
+                <div class="form-section">
+                    <h3>Operation Section</h3>
+                    <div class="dropdown-container">
+                        <label for="operation">Operation:</label>
+                        <select id="operation" name="operation">
+                            <option value="matmul">Matmul</option>
+                            <!-- Other operations can be added here -->
+                        </select>
+                    </div>
+                    <div class="range-container">
+                        <label for="m_value">M:</label>
+                        <div class="slider-container">
+                            <label for="m_from">From:</label>
+                            <input type="range" id="m_from" name="m_from" min="1" max="512" value="1" oninput="this.nextElementSibling.value = this.value">
+                            <output>1</output>
+                            <label for="m_to">To:</label>
+                            <input type="range" id="m_to" name="m_to" min="1" max="512" value="512" oninput="this.nextElementSibling.value = this.value">
+                            <output>512</output>
+                        </div>
+                    </div>
+                    <div class="range-container">
+                        <label for="n_value">N:</label>
+                        <div class="slider-container">
+                            <label for="n_from">From:</label>
+                            <input type="range" id="n_from" name="n_from" min="4096" max="14336" value="4096" step="4096" oninput="this.nextElementSibling.value = this.value">
+                            <output>4096</output>
+                            <label for="n_to">To:</label>
+                            <input type="range" id="n_to" name="n_to" min="4096" max="14336" value="14336" step="4096" oninput="this.nextElementSibling.value = this.value">
+                            <output>14336</output>
+                        </div>
+                    </div>
+                    <div class="range-container">
+                        <label for="k_value">N:</label>
+                        <div class="slider-container">
+                            <label for="k_from">From:</label>
+                            <input type="range" id="k_from" name="k_from" min="128" max="4096" value="4096" step="128" oninput="this.nextElementSibling.value = this.value">
+                            <output>128</output>
+                            <label for="n_to">To:</label>
+                            <input type="range" id="k_to" name="k_to" min="4096" max="14336" value="14336" step="128" oninput="this.nextElementSibling.value = this.value">
+                            <output>4096</output>
+                        </div>
+                    </div>
+                    <button type="submit" id="runOpProjection">Run Operation Projection</button>
                 </div>
-                <div class="dropdown-container">
-                    <label for="data_type">Data Type:</label>
-                    <select id="data_type" name="data_type">
-                        <!-- Options will be populated dynamically -->
-                    </select>
-                </div>
-                <div class="slider-container">
-                    <label for="batch_size">Batch Size:</label>
-                    <input type="range" id="batch_size" name="batch_size" min="1" max="512" value="64" oninput="this.nextElementSibling.value = this.value">
-                    <output>64</output>
-                </div>
-                <div class="slider-container">
-                    <label for="context_input">Context Input:</label>
-                    <input type="range" id="context_input" name="context_input" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
-                    <output>1024</output>
-                </div>
-                <div class="slider-container">
-                    <label for="context_output">Context Output:</label>
-                    <input type="range" id="context_output" name="context_output" min="512" max="2048" value="1024" step="512" oninput="this.nextElementSibling.value = this.value">
-                    <output>1024</output>
-                </div>
-                <div class="slider-container">
-                    <label for="kvcache_bucket">KVCache Bucket:</label>
-                    <input type="range" id="kvcache_bucket" name="kvcache_bucket" min="256" max="1024" value="256" step="256" oninput="this.nextElementSibling.value = this.value">
-                    <output>256</output>
-                </div>
-                <button type="submit">Run Projection</button>
             </form>
         </div>
     </div>
@@ -221,10 +291,10 @@
             }
             updateRoofline();
 
-            $('#projectionForm').submit(function(event) {
+            $('#runModelProjection').click(function(event) {
                 event.preventDefault();
 
-                var formData = $(this).serialize();
+                var formData = $('#projectionForm').serialize();
                 
                 $.ajax({
                     url: '/roofline',
@@ -252,6 +322,26 @@
                     error: function(xhr, status, error) {
                         console.error('Error in /run_projection:', error);
                         alert('An error occurred while running projection.');
+                    }
+                });
+            });
+
+            $('#runOpProjection').click(function(event) {
+                event.preventDefault();
+
+                var formData = $('#projectionForm').serialize();
+                
+                $.ajax({
+                    url: '/run_operation_projection',
+                    method: 'POST',
+                    data: formData,
+                    success: function(response) {
+                        updateData();
+                        console.log('Operation projection data submitted successfully.');
+                    },
+                    error: function(xhr, status, error) {
+                        console.error('Error in /run_operation_projection:', error);
+                        alert('An error occurred while running operation projection.');
                     }
                 });
             });

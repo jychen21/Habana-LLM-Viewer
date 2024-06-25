@@ -145,8 +145,7 @@ def main(device, device_type, op, op_version, data_type,
     }
     '''
 
-    analyzer = Analyzer_Mapping[proj_cfg["operation"]
-                                [-1]](proj_cfg)  # Analyzer(proj_cfg)
+    analyzer = Analyzer_Mapping[proj_cfg["operation"][-1]](proj_cfg)
     analyzer.analyze(False)
 
 
