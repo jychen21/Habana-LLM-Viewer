@@ -92,9 +92,9 @@ FFN Projection (
     ```sh
     python run_model_projection.py
     ```
-2. Simpily run with **[habana_viewer_server.py](./habana_viewer_server.py)** and the results will show up on localhost.
+2. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost.
     ```sh
-    python python habana_viewer_server.py
+    python python habana_viewer.py
     ```
 <!-- 3. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
 #### Operation Projection
