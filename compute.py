@@ -43,7 +43,7 @@ def proj_matmul(config: HardwareConfig, m, n, k):
     runtime_roofline = runtime_memory + runtime_compute * pipeline
 
     proj_rst = {
-        "name": "matmul",
+        "name": "Matmul",
         "m": m,
         "n": n,
         "k": k,
@@ -179,7 +179,7 @@ def proj_attn_softmax(config):
         seq_len_kv * 5
     runtime_compute = num_ops / flops_vec
 
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    runtime_roofline = max(runtime_memory, runtime_compute)
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     math_ai = num_ops / bytes_total
@@ -234,7 +234,7 @@ def proj_attn_scorev(config):
     runtime_compute = num_ops / tops
 
     math_ai = num_ops / bytes_total
-    runtime_roofline = runtime_memory if runtime_memory > runtime_compute else runtime_compute
+    runtime_roofline = max(runtime_memory, runtime_compute)
     bound = "memory" if runtime_memory > runtime_compute else "compute"
 
     proj_rst = {
@@ -255,7 +255,7 @@ def proj_attn_scorev(config):
 
 
 def proj_paged_attn_v1(config: HardwareConfig, num_blocks, block_size,
-                       num_heads_q, num_heads_kv, head_dim, bs, seqlen_kv):
+                       num_heads_q, num_heads_kv, head_dim, bs, seq_len_kv):
     num_bytes = config.num_bytes
     bw = config.hbm_bandwidth
     flops_mme = config.flops_mme
@@ -279,27 +279,83 @@ def proj_paged_attn_v1(config: HardwareConfig, num_blocks, block_size,
     return proj_rst
 
 
-def proj_flash_attn_v1(config: HardwareConfig, block_size, num_heads_q,
-                       num_heads_kv, head_dim, bs, seqlen_kv):
+def proj_flash_attn_v1(config: HardwareConfig, num_heads_q, num_heads_kv,
+                       hidden_size, batch_size, seq_len_q, seq_len_kv):
+    assert num_heads_q % num_heads_kv == 0, "query heads must be divisible by kv heads!"
+    head_dim = hidden_size // num_heads_q
+    num_groups = num_heads_q // num_heads_kv
     num_bytes = config.num_bytes
     bw = config.hbm_bandwidth
     flops_mme = config.flops_mme
     flops_mme_factor = config.flops_mme_factor[-1]
-    num_rounds = config.num_rounds
-    pipeline = config.pipeline
+    flops_vec = config.flops_vec
+    magic = magic_number = config.magic_number
+    magic *= config.device_ratio[3]
+    bt = batch_size * seq_len_q
+    if bt > magic_number:
+        magic *= config.device_ratio[4]
+        flops_mme_factor = config.flops_mme_factor[1]
+    tops = min(flops_mme, flops_mme_factor * seq_len_q * 1e12)
+    if seq_len_q == 1:
+        tops *= num_groups
+        # if config.enable_vec_bmm:
+        #     tops = config.hardware_config.flops_vec
+        # else:
+        #     tops *= num_groups
 
-    proj_rst = {}
+    params_q = batch_size * num_heads_q * seq_len_q * head_dim
+    params_k = batch_size * num_heads_kv * seq_len_kv * head_dim
+    params_a = batch_size * num_heads_q * seq_len_q * seq_len_kv
+    params_qk = params_q + params_k + params_a
+    bytes_qk = params_qk * num_bytes
+    ops_qk = batch_size * num_heads_q * seq_len_q * seq_len_kv * head_dim * 2
+    runtime_memory_qk = bytes_qk / bw
+    runtime_compute_qk = ops_qk / tops
+    runtime_roofline_qk = max(runtime_memory_qk, runtime_compute_qk)
+    ai_qk = ops_qk / bytes_qk
 
-    # proj_rst = {
-    #     "name": "FA_V1",
-    #     "operations": num_ops,
-    #     "size": bytes_total,
-    #     "math_ai": math_ai,
-    #     "tops_roofline": tops,
-    #     "mem_time": runtime_memory,
-    #     "cmp_time": runtime_compute,
-    #     "latency": runtime_roofline,
-    # }
+    params_s = batch_size * num_heads_q * seq_len_q * seq_len_kv
+    params_v = batch_size * num_heads_kv * seq_len_kv * head_dim
+    params_o = batch_size * num_heads_q * seq_len_q * head_dim
+    params_sv = params_s + params_v + params_o
+    bytes_sv = params_sv * num_bytes
+    ops_sv = batch_size * num_heads_q * seq_len_q * head_dim * seq_len_kv * 2
+    runtime_memory_sv = bytes_sv / bw
+    runtime_compute_sv = ops_sv / tops
+    runtime_roofline_sv = max(runtime_memory_sv, runtime_compute_sv)
+    ai_sv = ops_sv / bytes_sv
+
+    params_softmax = params_a + params_s
+    bytes_softmax = params_softmax * num_bytes
+    ops_softmax = batch_size * num_heads_q * seq_len_q * seq_len_kv * 5
+    runtime_memory_softmax = bytes_softmax / bw
+    runtime_compute_softmax = ops_softmax / flops_vec
+    runtime_roofline_softmax = max(runtime_memory_softmax, runtime_compute_softmax)
+    ai_softmax = ops_softmax / bytes_softmax
+
+    proj_rst = {
+        "name": "FlashAttn",
+        "type": "MHA" if num_heads_q == num_heads_kv else ("MQA" if num_heads_q == 1 else "GQA"),
+        "B": batch_size,
+        "M_q": num_heads_q,
+        "M_kv": num_heads_kv,
+        "T_q": seq_len_q,
+        "T_kv": seq_len_kv,
+        "D": head_dim,
+        "ops_qk": ops_qk,
+        "ops_sv": ops_sv,
+        "ops_softmax": ops_softmax,
+        "bytes_qk": bytes_qk,
+        "bytes_sv": bytes_sv,
+        "bytes_softmax": bytes_softmax,
+        "tops_roofline": tops,
+        "ai_qk": ai_qk,
+        "ai_sv": ai_sv,
+        "ai_softmax": ai_softmax,
+        "rt_qk": (runtime_memory_qk, runtime_compute_qk, runtime_roofline_qk),
+        "rt_sv": (runtime_memory_sv, runtime_compute_sv, runtime_roofline_sv),
+        "rt_softmax": (runtime_memory_softmax, runtime_compute_softmax, runtime_roofline_softmax)
+    }
 
     return proj_rst
 
@@ -590,20 +646,22 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
 
         proj_rst = proj_matmul(cfg, m, n, k)
     elif op_name == "FlashAttentionV1":
-        block_size = kwargs.get("block_size", 1024)
-        num_heads_q = kwargs.get("heads_q", 32)
-        num_heads_kv = kwargs.get("heads_kv", 32)
-        head_dim = kwargs.get("head_dim", 128)
-        bs = kwargs.get("bs", 1)
-        seqlen_kv = kwargs.get("seqlen_kv", 4096)
+        # block_size = kwargs.get("block_size", 1024)
+        heads_q = kwargs.get("heads_q", 32)
+        heads_kv = kwargs.get("heads_kv", 32)
+        hidden_size = kwargs.get("hidden_size", 4096)
+        batch_size = kwargs.get("batch_size", 1)
+        seq_len_q = kwargs.get("seq_len_q", 1)
+        seq_len_kv = kwargs.get("seq_len_kv", 4096)
 
         proj_rst = proj_flash_attn_v1(cfg,
-                                      block_size,
-                                      num_heads_q,
-                                      num_heads_kv,
-                                      head_dim,
-                                      bs,
-                                      seqlen_kv)
+                                    #   block_size,
+                                      heads_q,
+                                      heads_kv,
+                                      hidden_size,
+                                      batch_size,
+                                      seq_len_q,
+                                      seq_len_kv)
     elif op_name == "PagedAttentionV1":
         num_blocks = kwargs.get("num_blocks", 1024)
         block_size = kwargs.get("block_size", 128)
@@ -611,7 +669,7 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
         num_heads_kv = kwargs.get("heads_kv", 32)
         head_dim = kwargs.get("head_dim", 128)
         bs = kwargs.get("bs", 1)
-        seqlen_kv = kwargs.get("seqlen_kv", 4096)
+        seq_len_kv = kwargs.get("seq_len_kv", 4096)
 
         proj_rst = proj_paged_attn_v1(cfg,
                                       num_blocks,
@@ -620,7 +678,7 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
                                       num_heads_kv,
                                       head_dim,
                                       bs,
-                                      seqlen_kv)
+                                      seq_len_kv)
     else:
         assert 0, "operation projection currently just support Matmul!"
 

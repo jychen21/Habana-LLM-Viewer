@@ -75,15 +75,23 @@ class MatmulAnalyzer(Analyzer):
 class FlashAttnAnalyzer(Analyzer):
     def __init__(self, proj_cfg) -> None:
         super().__init__(proj_cfg)
+        self.heads_q = self.input["heads_q"]
+        self.heads_kv = self.input["heads_kv"]
+        self.hidden_size = self.input["hidden_size"]
+        self.seq_len_kv_list = self.input["seq_len_kv"]
+        self.seq_len_q = 1
+        self.batch_size_list = self.input["batch_size"]
 
     def analyze_input(self, device, type, dtype):
         proj_fa = []
-        # for m in self.m_list:
-        #     for k in self.k_list:
-        #         for n in self.n_list:
-        #             proj_rst = compute.do_op_projection(
-        #                 self.op, device, type, dtype, m=m, n=n, k=k)
-        #             proj_fa.append(proj_rst)
+        for seq_len_kv in self.seq_len_kv_list:
+            for batch_size in self.batch_size_list:
+                proj_rst = compute.do_op_projection(
+                    self.op, device, type, dtype, heads_q=self.heads_q,
+                    heads_kv=self.heads_kv, hidden_size=self.hidden_size,
+                    batch_size=batch_size, seq_len_q=self.seq_len_q,
+                    seq_len_kv=seq_len_kv)
+                proj_fa.append(proj_rst)
         return proj_fa
 
     def print_projection(self, proj_op, to_csv=False):
@@ -110,20 +118,19 @@ class PagedAttnAnalyzer(Analyzer):
 
 Analyzer_Mapping = {
     "Matmul": MatmulAnalyzer,
-    "FlashAttention": FlashAttnAnalyzer,
-    "PagedAttention": PagedAttnAnalyzer,
+    "FlashAttentionV1": FlashAttnAnalyzer,
+    "PagedAttentionV1": PagedAttnAnalyzer,
 }
 
 
 def main(device, device_type, op, op_version, data_type,
          batch_size_list, m_list, n_list, k_list):
-    proj_cfg = {
+    proj_cfg_matmul = {
         "operation": [op],
         "op_version": [op_version],  # v2""
         "device_list": [device],
         "type_list": [device_type],  # ["C", "D"],
         "dtype_list": [data_type],
-        "batch_size": batch_size_list,
         "input": {
             "m": m_list,
             "n": n_list,
@@ -131,7 +138,7 @@ def main(device, device_type, op, op_version, data_type,
         },
     }
     '''
-    proj_cfg = {
+    proj_cfg_matmul = {
         "operation": ["Matmul"],
         "op_version": ["v1"], # v2""
         "device_list": ["IntelGaudi2"],
@@ -144,9 +151,27 @@ def main(device, device_type, op, op_version, data_type,
         },
     }
     '''
-
-    analyzer = Analyzer_Mapping[proj_cfg["operation"][-1]](proj_cfg)
+    analyzer = Analyzer_Mapping[proj_cfg_matmul["operation"]
+                                [-1]](proj_cfg_matmul)
     analyzer.analyze(False)
+
+    # proj_cfg_flashattn = {
+    #     "operation": ["FlashAttentionV1"],
+    #     "op_version": ["v1"],  # v2""
+    #     "device_list": ["IntelGaudi2"],
+    #     "type_list": ["D"],  # ["C", "D"],
+    #     "dtype_list": ["BF16"],
+    #     "input": {
+    #         "heads_q": 32,
+    #         "heads_kv": 32,
+    #         "hidden_size": 4096,
+    #         "seq_len_kv": [512, 1024, 2048, 4096, 8192],
+    #         "batch_size": [64, 128, 256],
+    #     },
+    # }
+
+    # analyzer = Analyzer_Mapping[proj_cfg_flashattn["operation"][-1]](proj_cfg_flashattn)
+    # analyzer.analyze(False)
 
 
 if __name__ == "__main__":

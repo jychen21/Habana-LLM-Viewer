@@ -61,7 +61,9 @@ def plot():
         fig.add_trace(go.Scatter(x=operational_intensity, y=roofline,
                       mode='lines', name=f'{device}{device_type} Roofline'))
         fig.add_trace(go.Scatter(x=[arithmetic_intensity], y=[attainable_tops], mode='markers+text', text=[
-                      f"Model: {model}<br>\nAI: {arithmetic_intensity:.2f}FLOPS/Bytes<br>\nTops: {attainable_tops/config.TFLOPS:.2f}TFLOPs"], textposition="top left", marker=dict(color='red')))
+                      f"AI: {arithmetic_intensity:.2f}FLOPS/Bytes<br>\nTops: {attainable_tops/config.TFLOPS:.2f}TFLOPs"], textposition="top left", marker=dict(color='red')))
+        # fig.add_trace(go.Scatter(x=[arithmetic_intensity], y=[attainable_tops], mode='markers+text', text=[
+        #               f"Model: {model}<br>\nAI: {arithmetic_intensity:.2f}FLOPS/Bytes<br>\nTops: {attainable_tops/config.TFLOPS:.2f}TFLOPs"], textposition="top left", marker=dict(color='red')))
 
         fig.update_layout(
             xaxis=dict(type='log', title='Arithmetic Intensity (FLOPs/Byte)'),

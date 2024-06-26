@@ -677,7 +677,39 @@ def print_matmul_projection(op_name, proj_dict, to_csv=True):
 
 
 def print_flashattn_projection(op_name, proj_dict, to_csv=True):
-    pass
+    proj_item = ["Operation", "Device", "DType", "B", "M_q", "M_kv", "T_q",
+                 "T_kv", "D", "qk(us)", "sv(us)", "softmax(us)", "total(us)", "TFLOPs(1e12)"]
+
+    for device, device_proj in proj_dict.items():
+        for type, type_proj in device_proj.items():
+            proj_data = [proj_item]
+            for dtype, dtype_proj in type_proj.items():
+                for proj_rst in dtype_proj:
+                    attn_type = proj_rst["type"]
+                    B, M_q, T_q, D = proj_rst["B"], proj_rst["M_q"], proj_rst["T_q"], proj_rst["D"]
+                    M_kv, T_kv = proj_rst["M_kv"], proj_rst["T_kv"]
+                    rt_qk, rt_sv, rt_softmax = \
+                        proj_rst["rt_qk"][-1], proj_rst["rt_sv"][-1], proj_rst["rt_softmax"][-1]
+                    runtime = rt_qk + rt_sv + rt_softmax
+                    latency = round(runtime * MicroSecs, 2)
+                    rt_qk, rt_sv, rt_softmax = \
+                        round(rt_qk * MicroSecs, 2), round(rt_sv *
+                                                           MicroSecs, 2), round(rt_softmax * MicroSecs, 2)
+
+                    throughput = round(proj_rst["tops_roofline"] / TFLOPS, 2)
+                    proj_data.append([attn_type, f"{device}{type}", dtype, B, M_q, M_kv, T_q,
+                                      T_kv, D, rt_qk, rt_sv, rt_softmax, latency, throughput])
+                proj_data.append([""] * len(proj_item))
+
+            print(f"{op_name}_{device}{type}_projection".center(120))
+            print(tabulate(proj_data))
+
+            if to_csv:
+                op_dir = f"./data/operation/{op_name}"
+                create_data_dir(op_dir)
+                with open(f"{op_dir}/{device}{type}_projection.csv", "w", newline="") as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerows(proj_data)
 
 
 def print_pagedattn_projection(op_name, proj_dict, to_csv=True):
