@@ -6,8 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
-import config
-import helper
+from scripts import config, helper
 from run_model_projection import Analyzer
 
 

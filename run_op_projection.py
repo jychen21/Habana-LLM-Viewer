@@ -3,9 +3,7 @@ import csv
 import argparse
 import tabulate
 from abc import ABC, abstractmethod
-import helper
-import config
-import compute
+from scripts import helper, config, compute
 
 
 class Analyzer:

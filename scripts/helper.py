@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objs as go
 import plotly.io as pio
 
-from config import *
+from .config import *
 
 
 proj_cfg = {

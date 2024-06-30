@@ -5,7 +5,7 @@
 
 
 import math
-from config import *
+from .config import *
 
 
 def proj_matmul(config: HardwareConfig, m, n, k):

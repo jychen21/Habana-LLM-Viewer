@@ -1,10 +1,7 @@
 import argparse
 import tabulate
 from tqdm import tqdm
-import helper
-import config
-import compute
-import memory
+from scripts import helper, config, compute, memory
 
 
 class Analyzer:
