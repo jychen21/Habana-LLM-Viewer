@@ -1,7 +1,7 @@
 ## Habana-Viewer
 Habana-Viewer is a projection tool for LLMs performance and memory analysis on Intel Gaudi platform. You can use this tool as a model optimization guidline on Intel Gaudi. This tool contains model projection as well as operation projection.
 <!-- ![Habana-Viewer Web](./data/Habana-viewer-Web-Demo.png) -->
-![Llama3-8B Overall Projection](./data/model/Llama3-8B/IntelGaudi2B_pp1_tp1_overall_projection.png)
+![Llama2-13B Overall Projection](./data/example_overall_projection.png)
 
 ### Model Projection
 |Model Name|Projected Data|
@@ -88,13 +88,13 @@ FFN Projection (
 
 ### Command
 #### Model Projection
-1. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
+1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost (Currently not fully enabled).
+    ```sh
+    python habana_viewer.py
+    ```
+2. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
     ```sh
     python run_model_projection.py
-    ```
-2. (Currently not fully enabled) Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost.
-    ```sh
-    python python habana_viewer.py
     ```
 <!-- 3. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
 #### Operation Projection
