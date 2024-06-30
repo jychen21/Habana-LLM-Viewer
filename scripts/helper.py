@@ -718,10 +718,10 @@ def print_layer_analysis(model_name, proj_dict, to_csv=True):
                                         proj_decode_steps.items())[-1]
                                     layer_proj_decode = last_step[0][1]
                                     tq = layer_proj_decode["tq"]
-                                    tkv = layer_proj_prefill["tkv"]
+                                    tkv = layer_proj_decode["tkv"]
                                     # qkvo / qk, softmax, sv / up, down, gate
                                     for mod_name in ["qkvo", "attn", "ffn"]:
-                                        module = layer_proj_prefill[mod_name]
+                                        module = layer_proj_decode[mod_name]
                                         if isinstance(module, dict):
                                             op = module
                                             name = op["name"]

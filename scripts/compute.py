@@ -604,8 +604,6 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
 
     proj_rst = {}
     proj_decoding_steps = {}
-    proj_decoding_latency = []
-    proj_decoding_ai = []
 
     for step in range(output):
         if step == 0:
@@ -627,17 +625,8 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
                 proj_decoding_steps[seq_len_kv] = [proj_decoder(cfg)]
             else:
                 proj_decoding_steps[seq_len_kv].append(proj_decoder(cfg))
-            proj_decoding_latency.append(
-                proj_decoding_steps[seq_len_kv][-1][0])
-            proj_decoding_ai.append(
-                proj_decoding_steps[seq_len_kv][-1][1]["math_ai"])
 
     proj_rst["decode"] = proj_decoding_steps
-
-    overall_ai = round(((proj_rst["prefill"][1]["math_ai"] + sum(proj_decoding_ai)) /
-                        (len(proj_decoding_ai) + 1)), 2)
-
-    proj_rst["arithmetic_intensity"] = overall_ai
 
     return proj_rst
 
