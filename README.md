@@ -1,5 +1,6 @@
 ## Habana-Viewer
-Habana-Viewer is a projection tool for LLMs performance and memory analysis on Intel Gaudi platform. You can use this tool as a model optimization guidline on Intel Gaudi. This tool contains model projection as well as operation projection.
+Habana-Viewer is a tool that provides Roofline model, LLM performance prediction and memory analysis for Intel Gaudi platform. This tool can be used to estimate the approximate performance of models such as Llama2-13B, Qwen-7B, Mixtral-8x7B on Intel Gaudi platform.
+
 <!-- ![Habana-Viewer Web](./data/Habana-viewer-Web-Demo.png) -->
 ![Llama2-13B Overall Projection](./data/example_overall_projection.png)
 
