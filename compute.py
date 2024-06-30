@@ -330,7 +330,8 @@ def proj_flash_attn_v1(config: HardwareConfig, num_heads_q, num_heads_kv,
     ops_softmax = batch_size * num_heads_q * seq_len_q * seq_len_kv * 5
     runtime_memory_softmax = bytes_softmax / bw
     runtime_compute_softmax = ops_softmax / flops_vec
-    runtime_roofline_softmax = max(runtime_memory_softmax, runtime_compute_softmax)
+    runtime_roofline_softmax = max(
+        runtime_memory_softmax, runtime_compute_softmax)
     ai_softmax = ops_softmax / bytes_softmax
 
     proj_rst = {
@@ -602,7 +603,7 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
     num_experts = model["num_experts"]
 
     proj_rst = {}
-    proj_decoding_steps = []
+    proj_decoding_steps = {}
     proj_decoding_latency = []
     proj_decoding_ai = []
 
@@ -622,9 +623,14 @@ def do_model_projection(model_name, device, type, pp, tp, dtype, input, output, 
             cfg = Config(device, type, dtype, pp, tp, hidden_size, num_heads_q, num_heads_kv,
                          intermediate_size, mlp_with_gate, num_experts, num_layers_mlp,
                          num_layers_moe, seq_len_q, seq_len_kv, bs, kvcache_bucket, **kwargs)
-            proj_decoding_steps.append(proj_decoder(cfg))
-            proj_decoding_latency.append(proj_decoding_steps[-1][0])
-            proj_decoding_ai.append(proj_decoding_steps[-1][1]["math_ai"])
+            if seq_len_kv not in proj_decoding_steps.keys():
+                proj_decoding_steps[seq_len_kv] = [proj_decoder(cfg)]
+            else:
+                proj_decoding_steps[seq_len_kv].append(proj_decoder(cfg))
+            proj_decoding_latency.append(
+                proj_decoding_steps[seq_len_kv][-1][0])
+            proj_decoding_ai.append(
+                proj_decoding_steps[seq_len_kv][-1][1]["math_ai"])
 
     proj_rst["decode"] = proj_decoding_steps
 
@@ -655,7 +661,7 @@ def do_op_projection(op_name, device, type, dtype, **kwargs):
         seq_len_kv = kwargs.get("seq_len_kv", 4096)
 
         proj_rst = proj_flash_attn_v1(cfg,
-                                    #   block_size,
+                                      #   block_size,
                                       heads_q,
                                       heads_kv,
                                       hidden_size,
