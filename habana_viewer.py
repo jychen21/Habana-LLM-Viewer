@@ -28,7 +28,7 @@ for _ in range(9):
     batch_sizes.append(batch_sizes[-1] * 2)
 
 
-height = 700
+height = 800
 
 
 app.layout = html.Div([
@@ -170,7 +170,7 @@ def plot_layer_projection(device, type_, model, dtype, layer_projection):
     cfg = config.HardwareConfig(device, type_, dtype)
 
     peak_bandwidth = cfg.hbm_bandwidth / config.TFLOPS
-    operational_intensity = np.logspace(-3, 3, 2048)
+    operational_intensity = np.logspace(-4, 4, 512)
 
     peak_flops_mme = cfg.flops_mme / config.T_BW
     turning_point_mme = peak_flops_mme / peak_bandwidth
