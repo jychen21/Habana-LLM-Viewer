@@ -50,7 +50,7 @@ def proj_matmul(config: HardwareConfig, m, n, k):
         "operations": num_ops,
         "size": bytes_total,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
         "latency": runtime_roofline,
@@ -94,7 +94,7 @@ def proj_qkvo_proj(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -146,7 +146,7 @@ def proj_attn_qk(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -164,7 +164,7 @@ def proj_attn_softmax(config):
     seq_len_q = config.input_config.seq_len_q
     seq_len_kv = config.input_config.seq_len_kv
     bw = config.hardware_config.hbm_bandwidth
-    flops_vec = config.hardware_config.flops_vec
+    tops = config.hardware_config.flops_vec
     hw_ai_vec = config.hardware_config.hardware_ai_vec
 
     params_in = batch_size * num_heads_q * seq_len_q * seq_len_kv
@@ -177,7 +177,7 @@ def proj_attn_softmax(config):
     # max x-max exp(x-max) sum(exp(x-max)) x/sum(exp(x-max))
     num_ops = batch_size * num_heads_q * seq_len_q * \
         seq_len_kv * 5
-    runtime_compute = num_ops / flops_vec
+    runtime_compute = num_ops / tops
 
     runtime_roofline = max(runtime_memory, runtime_compute)
     bound = "memory" if runtime_memory > runtime_compute else "compute"
@@ -190,7 +190,7 @@ def proj_attn_softmax(config):
         "size": bytes_total,
         "hw_ai": hw_ai_vec,
         "math_ai": math_ai,
-        "tops_roofline": min(flops_vec, math_ai * bw),
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -243,7 +243,7 @@ def proj_attn_scorev(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -349,7 +349,7 @@ def proj_flash_attn_v1(config: HardwareConfig, num_heads_q, num_heads_kv,
         "bytes_qk": bytes_qk,
         "bytes_sv": bytes_sv,
         "bytes_softmax": bytes_softmax,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, (ai_qk+ai_sv) * bw),
         "ai_qk": ai_qk,
         "ai_sv": ai_sv,
         "ai_softmax": ai_softmax,
@@ -397,7 +397,7 @@ def proj_mlp_up_or_w1(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -443,7 +443,7 @@ def proj_mlp_down_or_w2(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,
@@ -489,7 +489,7 @@ def proj_mlp_gate_or_w3(config):
         "size": bytes_total,
         "hw_ai": hw_ai_mme,
         "math_ai": math_ai,
-        "tops_roofline": tops,
+        "tops_roofline": min(tops, math_ai * bw),
         "bw": bw,
         "mem_time": runtime_memory,
         "cmp_time": runtime_compute,

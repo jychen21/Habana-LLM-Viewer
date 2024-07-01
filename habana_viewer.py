@@ -205,7 +205,7 @@ def plot_layer_projection(device, type_, model, dtype, layer_projection):
     fig_layer.add_trace(go.Scatter(
         x=[turning_point_mme], y=[np.max(roofline_mme)],
         mode='markers+text', name='MME Truning Point',
-        text=["MME"], textposition="bottom right",
+        text=[f"MME({device}{type_})"], textposition="bottom right",
         marker=dict(color='red', size=8)
     ))
     # VEC
@@ -228,7 +228,7 @@ def plot_layer_projection(device, type_, model, dtype, layer_projection):
     fig_layer.add_trace(go.Scatter(
         x=[turning_point_vec], y=[np.max(roofline_vec)],
         mode='markers+text', name='VEC Truning Point',
-        text=["VEC"], textposition="bottom right",
+        text=[f"VEC({device}{type_})"], textposition="bottom right",
         marker=dict(color='red', size=8)
     ))
     fig_layer.update_layout(
