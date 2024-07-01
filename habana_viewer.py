@@ -75,15 +75,15 @@ app.layout = html.Div([
     ], style={'padding': 20}),
 
     html.Div([
-        # dcc.Graph(id='overall-projection-graph'),
-        # dcc.Graph(id='layer-projection-graph')
-        html.Div([
-            dcc.Graph(id='overall-projection-graph')
-        ], style={'width': '49%', 'display': 'inline-block'}),
+        dcc.Graph(id='overall-projection-graph'),
+        dcc.Graph(id='layer-projection-graph')
+        # html.Div([
+        #     dcc.Graph(id='overall-projection-graph')
+        # ], style={'width': '49%', 'display': 'inline-block'}),
 
-        html.Div([
-            dcc.Graph(id='layer-projection-graph')
-        ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
+        # html.Div([
+        #     dcc.Graph(id='layer-projection-graph')
+        # ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
     ], style={'padding': 20}),
 
     html.Div([
