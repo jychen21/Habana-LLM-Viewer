@@ -23,9 +23,7 @@ models = list(config.ModelDict.keys())
 in_min, in_max, in_step = 128, 4096, 512
 out_min, out_max, out_step = 512, 8192, 512
 kv_bucket_min, kv_bucket_max, kv_bucket_step = 128, 1024, 128
-batch_sizes = [1]
-for _ in range(9):
-    batch_sizes.append(batch_sizes[-1] * 2)
+batch_sizes = [2 ** i for i in range(10)]
 
 
 height = 800
@@ -33,65 +31,51 @@ height = 800
 
 app.layout = html.Div([
     html.Div([
-        html.Div([
-            html.Label("Device"),
-            dcc.Dropdown(id='device-dropdown',
-                         options=[{'label': i, 'value': i} for i in devices], value=devices[0]),
-
-            html.Label("Type"),
-            dcc.Dropdown(
-                id='type-dropdown', options=[{'label': i, 'value': i} for i in types], value=types[0]),
-
-            html.Label("Dtype"),
-            dcc.Dropdown(
-                id='dtype-dropdown', options=[{'label': i, 'value': i} for i in dtypes], value=dtypes[-2]),
-        ], style={'width': '30%', 'display': 'inline-block'}),
-
-        html.Div([
-            html.Label("Model"),
-            dcc.Dropdown(
-                id='model-dropdown', options=[{'label': i, 'value': i} for i in models], value=models[1]),
-
-            html.Label("Input Length"),
-            dcc.Slider(id='input-length-slider', min=in_min,
-                       max=in_max, step=in_step, value=in_min),
-
-            html.Label("Output Length"),
-            dcc.Slider(id='output-length-slider', min=out_min,
-                       max=out_max, step=out_step, value=out_max/2),
-
-            html.Label("Batch Size"),
-            dcc.Dropdown(id='batch-size-dropdown', options=[
-                         {'label': i, 'value': i} for i in batch_sizes], multi=True, value=batch_sizes)
-        ], style={'width': '30%', 'display': 'inline-block', 'marginLeft': '5%'}),
-
-        html.Div([
-            html.Label("KVcache_Bucket"),
-            dcc.Slider(id='kvcache-bucket-slider', min=kv_bucket_min,
-                       max=kv_bucket_max, step=kv_bucket_step, value=128)
-        ], style={'width': '30%', 'display': 'inline-block', 'marginLeft': '5%'}),
-
-        html.Button('Run Analysis', id='run-analysis-button'),
-    ], style={'padding': 20}),
-
-    html.Div([
         dcc.Graph(id='overall-projection-graph'),
-        dcc.Graph(id='layer-projection-graph')
-        # html.Div([
-        #     dcc.Graph(id='overall-projection-graph')
-        # ], style={'width': '49%', 'display': 'inline-block'}),
-
-        # html.Div([
-        #     dcc.Graph(id='layer-projection-graph')
-        # ], style={'width': '49%', 'display': 'inline-block', 'float': 'right'})
-    ], style={'padding': 20}),
-
-    html.Div([
+        dcc.Graph(id='layer-projection-graph'),
         html.Label("Overall Projection Table"),
         html.Div(id='overall-projection-table')
-    ], style={'padding': 20}),
+    ], style={'width': '75%', 'display': 'inline-block', 'padding': 20}),
 
-    dcc.Interval(id='interval-component', interval=1 * \
+    html.Div([
+        html.H1("Habana-Viewer (Roofline Model for Gaudi)"),
+
+        html.Label("Device"),
+        dcc.Dropdown(id='device-dropdown',
+                     options=[{'label': i, 'value': i} for i in devices], value=devices[0]),
+
+        html.Label("Type"),
+        dcc.Dropdown(
+            id='type-dropdown', options=[{'label': i, 'value': i} for i in types], value=types[0]),
+
+        html.Label("Dtype"),
+        dcc.Dropdown(
+            id='dtype-dropdown', options=[{'label': i, 'value': i} for i in dtypes], value=dtypes[-2]),
+
+        html.Label("Model"),
+        dcc.Dropdown(
+            id='model-dropdown', options=[{'label': i, 'value': i} for i in models], value=models[1]),
+
+        html.Label("Input Length"),
+        dcc.Slider(id='input-length-slider', min=in_min,
+                   max=in_max, step=in_step, value=in_min),
+
+        html.Label("Output Length"),
+        dcc.Slider(id='output-length-slider', min=out_min,
+                   max=out_max, step=out_step, value=out_max / 2),
+
+        html.Label("Batch Size"),
+        dcc.Dropdown(id='batch-size-dropdown', options=[
+                     {'label': i, 'value': i} for i in batch_sizes], multi=True, value=batch_sizes),
+
+        html.Label("KVcache_Bucket"),
+        dcc.Slider(id='kvcache-bucket-slider', min=kv_bucket_min,
+                   max=kv_bucket_max, step=kv_bucket_step, value=128),
+
+        html.Button('Run Analysis', id='run-analysis-button'),
+    ], style={'width': '20%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': 20}),
+
+    dcc.Interval(id='interval-component', interval=1 *
                  1000, n_intervals=0, max_intervals=1)
 ])
 
