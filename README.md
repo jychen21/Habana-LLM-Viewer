@@ -7,11 +7,11 @@ Habana-Viewer is a tool that provides Roofline model, LLM performance prediction
 
 ## Model Projection
 ### Command
-1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost (Currently not fully enabled).
+1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost.
     ```sh
     python habana_viewer.py
     ```
-2. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
+2. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model".
     ```sh
     python run_model_projection.py \
     --device IntelGaudi2 \

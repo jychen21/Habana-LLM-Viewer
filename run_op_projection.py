@@ -205,6 +205,7 @@ if __name__ == "__main__":
                         type=int,
                         default=[14336])
     parser.add_argument("--k-list",
+                        nargs='+',
                         type=int,
                         default=[4096])
     # Attn
