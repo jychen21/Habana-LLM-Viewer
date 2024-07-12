@@ -13,13 +13,9 @@ For a comprehensive Roofline analysis, including computation and communication, 
 '''
 
 
-def all2all():
+def allgather(config, transfer_size):
     pass
 
 
-def allgather():
-    pass
-
-
-def allreduce():
+def allreduce(config, transfer_size):
     pass

@@ -150,7 +150,7 @@ if __name__ == "__main__":
     parser.add_argument("--model",
                         type=str,
                         choices=list(config.ModelDict.keys()),
-                        default="Llama2-13B")
+                        default="Llama2-7B")
     parser.add_argument("--data-type",
                         type=str,
                         choices=list(config.DType2Bytes.keys()),
@@ -160,10 +160,10 @@ if __name__ == "__main__":
                         default=32)
     parser.add_argument("--context-input",
                         type=int,
-                        default=512)
+                        default=128)
     parser.add_argument("--context-output",
                         type=int,
-                        default=1024)
+                        default=2048)
     parser.add_argument("--kvcache-bucket",
                         type=int,
                         choices=[256, 512, 1024],

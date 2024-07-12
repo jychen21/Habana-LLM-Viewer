@@ -67,6 +67,7 @@ DeviceType2Ratio = {
     "B": [1.00, 3.38, 1.69, 1.6, 1.25, 0.14, 0.42, 0.68],
     "C": [0.65, 2.19, 1.10, 1.6, 1.25, 0.26, 0.67, 0.88],
     "D": [0.32, 1.08, 0.54, 1.6, 1.25, 0.67, 0.84, 0.94],
+    # "E": [0.32, 3.38, 1.69, 1.6, 1.25, 0.14, 0.42, 0.68], # debug
 }
 
 
@@ -85,6 +86,8 @@ class HardwareConfig:
         self.flops_mme_factor.append(self.flops_mme_factor[0])
         self.num_rounds = 1.0
         self.magic_number = 2**7
+        if type == 'E':
+            self.magic_number *= 0.44
         self.pipeline = self.device_ratio[-3]
         self.flops_vec = HardwareParameters[self.device]["Flops"][self.dtype]["Vec"]
         self.hardware_ai_mme = self.flops_mme / self.hbm_bandwidth
@@ -136,7 +139,7 @@ class Config:
                 self.hardware_config.pipeline = self.hardware_config.device_ratio[-2]
             elif bt > magic:
                 self.hardware_config.pipeline = self.hardware_config.device_ratio[-1]
-            if bt % magic != 0:
+            if bt < magic: # if bt % magic != 0:
                 self.hardware_config.num_rounds = math.ceil(bt / magic)
 
         self.kvcache_bucket = kvcache_bucket

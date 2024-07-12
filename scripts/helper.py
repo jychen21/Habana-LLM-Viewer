@@ -158,8 +158,8 @@ def plot_overall_projection(model_name, device, type, pp, tp, figure_name, proj_
 
 
 def extract_overall_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
-    proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCacheBucket", "Prefill(ms)",
-                 "DecodeMin(ms)", "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
+    proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCache Bucket", "Prefill(ms)",
+                 "Decode Min(ms)", "Decode Max(ms)", "Decode Avg(ms)", "Latency Avg(ms)", "Throughput(tokens/sec)"]
 
     device_proj = proj_dict[device]
     type_proj = device_proj[type_]
@@ -208,7 +208,7 @@ def extract_overall_projection(proj_dict, device, type_, pp, tp, dtype, input_le
                                 (len(decode_latency_list_full_steps) + 1)) * MilliSecs, 2)
         throughput = round((1 / overall_latency) * bs * MilliSecs, 2)
         batch_throughputs.append(throughput)
-        overall_projection_table.append([f"{device}{type}", pp, tp, dtype, input_length, output_length,
+        overall_projection_table.append([f"{device}{type_}", pp, tp, dtype, input_length, output_length,
                                          bs, kvcache_bucket, prefill_latency, decode_latency_min,
                                          decode_latency_max, decode_latency_avg, overall_latency,
                                          throughput if mem_consumed != "OOM" else "OOM"])
@@ -224,6 +224,9 @@ def extract_overall_projection(proj_dict, device, type_, pp, tp, dtype, input_le
 
 
 def extract_layer_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
+    proj_item = ["Device", "PP", "TP", "DType", "BS", "Input", "Output", "Operation",
+                 "SeqLenQ", "SeqLenKV", "NumOps(G)", "Memory(GB)", "TopsRF(TFlops)", "AI", "Bound"]
+
     device_proj = proj_dict[device]
     type_proj = device_proj[type_]
     pp_proj = type_proj[pp]
@@ -232,6 +235,7 @@ def extract_layer_projection(proj_dict, device, type_, pp, tp, dtype, input_leng
     input_proj = dtype_proj[input_length]
     output_proj = input_proj[output_length]
     batch_layer_projection = []
+    layer_analysis = {"prefill": [proj_item], "decode": [proj_item]}
 
     for _, proj_rst in output_proj:
         compute = proj_rst["compute"]
@@ -272,17 +276,106 @@ def extract_layer_projection(proj_dict, device, type_, pp, tp, dtype, input_leng
 
         batch_layer_projection.append(layer_projection)
 
+    for bs, proj_rst in output_proj:
+        compute = proj_rst["compute"]
+        proj_prefill_step = compute["prefill"]
+        proj_decode_steps = compute["decode"]
+
+        # prefill
+        layer_proj_prefill = proj_prefill_step[1]
+        tq = layer_proj_prefill["tq"]
+        tkv = layer_proj_prefill["tkv"]
+        # qkvo / qk, softmax, sv / up, down, gate
+        for mod_name in ["qkvo", "attn", "ffn"]:
+            module = layer_proj_prefill[mod_name]
+            if isinstance(module, dict):
+                op = module
+                name = op["name"]
+                num_ops = round(
+                    op["operations"] / GigaParam, 2)
+                size = round(
+                    op["size"] / GigaBytes, 2)
+                tops = round(
+                    op["tops_roofline"] / TFLOPS, 2)
+                math_ai = round(
+                    op["math_ai"], 2)
+                bound = op["bound"]
+                layer_analysis["prefill"].append([f"{device}{type_}",
+                                                    pp, tp, dtype, bs, input_length, output_length,
+                                                    name, tq, tkv, num_ops, size, tops,
+                                                    math_ai, bound])
+            elif isinstance(module, tuple):
+                for op in module:
+                    if op is not None:
+                        name = op["name"]
+                        num_ops = round(
+                            op["operations"] / GigaParam, 2)
+                        size = round(
+                            op["size"] / GigaBytes, 2)
+                        tops = round(
+                            op["tops_roofline"] / TFLOPS, 2)
+                        math_ai = round(
+                            op["math_ai"], 2)
+                        bound = op["bound"]
+                        layer_analysis["prefill"].append([f"{device}{type_}",
+                                                            pp, tp, dtype, bs, input_length, output_length,
+                                                            name, tq, tkv, num_ops, size, tops,
+                                                            math_ai, bound])
+
+        # decoding
+        _, last_step = list(
+            proj_decode_steps.items())[-1]
+        layer_proj_decode = last_step[0][1]
+        tq = layer_proj_decode["tq"]
+        tkv = layer_proj_decode["tkv"]
+        # qkvo / qk, softmax, sv / up, down, gate
+        for mod_name in ["qkvo", "attn", "ffn"]:
+            module = layer_proj_decode[mod_name]
+            if isinstance(module, dict):
+                op = module
+                name = op["name"]
+                num_ops = round(
+                    op["operations"] / GigaParam, 2)
+                size = round(
+                    op["size"] / GigaBytes, 2)
+                tops = round(
+                    op["tops_roofline"] / TFLOPS, 2)
+                math_ai = round(
+                    op["math_ai"], 2)
+                bound = op["bound"]
+                layer_analysis["decode"].append([f"{device}{type_}",
+                                                pp, tp, dtype, bs, input_length, output_length,
+                                                name, tq, tkv, num_ops, size, tops,
+                                                math_ai, bound])
+            elif isinstance(module, tuple):
+                for op in module:
+                    if op is not None:
+                        name = op["name"]
+                        num_ops = round(
+                            op["operations"] / GigaParam, 2)
+                        size = round(
+                            op["size"] / GigaBytes, 2)
+                        tops = round(
+                            op["tops_roofline"] / TFLOPS, 2)
+                        math_ai = round(
+                            op["math_ai"], 2)
+                        bound = op["bound"]
+                        layer_analysis["decode"].append([f"{device}{type_}",
+                                                        pp, tp, dtype, bs, input_length, output_length,
+                                                        name, tq, tkv, num_ops, size, tops,
+                                                        math_ai, bound])
+
     layer_projection_dict = {
         "batch_sizes": batch_sizes,
         'batch_layer_projection': batch_layer_projection
     }
 
-    return layer_projection_dict
+    return layer_projection_dict, layer_analysis
 
 
 def print_overall_projection(model_name, proj_dict, kvcache_bucket, batchsize_list, to_csv=True, plot=True):
-    proj_item = ["Model", "Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCacheBucket", "Prefill(ms)",
-                 "DecodeMin(ms)", "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
+    proj_item = ["Model", "Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCache Bucket", "Prefill(ms)",
+                 "Decode Min(ms)", "Decode Max(ms)", "Decode Avg(ms)", "Latency Avg(ms)", "Throughput(tokens/sec)"]
 
     for device, device_proj in proj_dict.items():
         for type, type_proj in device_proj.items():
@@ -367,8 +460,8 @@ def print_overall_projection(model_name, proj_dict, kvcache_bucket, batchsize_li
 
 def print_overall_projection_in_detail(model_name, proj_dict, kvcache_bucket, to_csv=True):
     proj_item = ["DType", "Input", "Output", "BS", "HiddenSize", "HeadsQ", "HeadsKV", "InterSize",
-                 "WithGate", "Experts", "Layers", "KVCacheBucket", "Prefill(ms)", "DecodeMin(ms)",
-                 "DecodeMax(ms)", "DecodeAvg(ms)", "Latency(ms)", "Throughput(tokens/sec)"]
+                 "WithGate", "Experts", "Layers", "KVCache Bucket", "Prefill(ms)", "Decode Min(ms)",
+                 "Decode Max(ms)", "Decode Avg(ms)", "Latency Avg(ms)", "Throughput(tokens/sec)"]
 
     model = ModelDict[model_name]
     hidden_size = model["hidden_size"]
@@ -617,11 +710,14 @@ def print_layer_projection(model_name, proj_dict, to_csv=True):
                         print(tabulate(sv_layer_proj_prefill_list))
                         print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_prefill_ffn_up_projection".center(160))
                         print(tabulate(up_layer_proj_prefill_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_qk_projection".center(160))
+                        print(
+                            f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_qk_projection".center(160))
                         print(tabulate(qk_layer_proj_decode_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_sv_projection".center(160))
+                        print(
+                            f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_attn_sv_projection".center(160))
                         print(tabulate(sv_layer_proj_decode_list))
-                        print(f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_ffn_up_projection".center(160))
+                        print(
+                            f"{model_name}_{device}{type}_pp{pp}_tp{tp}_decode_ffn_up_projection".center(160))
                         print(tabulate(up_layer_proj_decode_list))
                         '''
 
@@ -825,8 +921,8 @@ def print_projected_mem_per_device(model_name, memory_dict, batchsize_list, cont
 
 
 def print_matmul_projection(op_name, proj_dict, to_csv=True):
-    proj_item = ["Operation", "Device", "DType", "M",
-                 "N", "K", "AI", "Latency(us)", "TFLOPs(1e12)"]
+    proj_item = ["Operation", "Device", "DType", "M", "N", "K",
+                 "NumOps(e12)", "AI", "Latency(us)", "TFLOPs(e12)"]
 
     for device, device_proj in proj_dict.items():
         for type, type_proj in device_proj.items():
@@ -834,14 +930,15 @@ def print_matmul_projection(op_name, proj_dict, to_csv=True):
             for dtype, dtype_proj in type_proj.items():
                 for proj_rst in dtype_proj:
                     m, n, k = proj_rst["m"], proj_rst["n"], proj_rst["k"]
+                    num_ops = round(proj_rst["operations"] / 1e9, 2)
                     latency = round(
                         proj_rst["latency"] * MicroSecs, 2)
                     math_ai = round(proj_rst["math_ai"], 2)
 
                     throughput = round(proj_rst["tops_roofline"] / TFLOPS, 2)
                     proj_data.append(
-                        [op_name, f"{device}{type}", dtype, m,
-                            n, k, math_ai, latency, throughput]
+                        [op_name, f"{device}{type}", dtype, m, n, k,
+                         num_ops, math_ai, latency, throughput]
                     )
                 proj_data.append([""] * len(proj_item))
 

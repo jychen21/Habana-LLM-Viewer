@@ -11,7 +11,7 @@ from run_model_projection import Analyzer
 
 
 app = dash.Dash(__name__)
-app.title = "Habana-Viewer"
+app.title = "Habana-LLM-Viewer"
 
 
 devices = list(config.HardwareParameters.keys())
@@ -23,57 +23,94 @@ models = list(config.ModelDict.keys())
 in_min, in_max, in_step = 128, 4096, 512
 out_min, out_max, out_step = 512, 8192, 512
 kv_bucket_min, kv_bucket_max, kv_bucket_step = 128, 1024, 128
-batch_sizes = [2 ** i for i in range(10)]
+batch_sizes = [2 ** i for i in range(10)]  # + [14, 15, 56, 255, 257]
+batch_sizes = sorted(batch_sizes)
 
 
 height = 800
 
 
 app.layout = html.Div([
-    html.Div([
-        dcc.Graph(id='overall-projection-graph'),
-        dcc.Graph(id='layer-projection-graph'),
-        html.Label("Overall Projection Table"),
-        html.Div(id='overall-projection-table')
-    ], style={'width': '75%', 'display': 'inline-block', 'padding': 20}),
+    html.H1("Habana-LLM-Viewer", style={'textAlign': 'center'}),
 
     html.Div([
-        html.H1("Habana-Viewer (Roofline Model for Gaudi)"),
-
         html.Label("Device"),
         dcc.Dropdown(id='device-dropdown',
                      options=[{'label': i, 'value': i} for i in devices], value=devices[0]),
+        html.Br(),
 
         html.Label("Type"),
         dcc.Dropdown(
             id='type-dropdown', options=[{'label': i, 'value': i} for i in types], value=types[0]),
+        html.Br(),
 
         html.Label("Dtype"),
         dcc.Dropdown(
             id='dtype-dropdown', options=[{'label': i, 'value': i} for i in dtypes], value=dtypes[-2]),
+        html.Br(),
 
         html.Label("Model"),
         dcc.Dropdown(
-            id='model-dropdown', options=[{'label': i, 'value': i} for i in models], value=models[1]),
+            id='model-dropdown', options=[{'label': i, 'value': i} for i in models], value=models[0]),
+        html.Br(),
 
         html.Label("Input Length"),
         dcc.Slider(id='input-length-slider', min=in_min,
                    max=in_max, step=in_step, value=in_min),
+        html.Br(),
 
         html.Label("Output Length"),
         dcc.Slider(id='output-length-slider', min=out_min,
                    max=out_max, step=out_step, value=out_max / 2),
+        html.Br(),
 
         html.Label("Batch Size"),
         dcc.Dropdown(id='batch-size-dropdown', options=[
-                     {'label': i, 'value': i} for i in batch_sizes], multi=True, value=batch_sizes),
+            {'label': i, 'value': i} for i in batch_sizes], multi=True, value=batch_sizes),
+        html.Br(),
 
-        html.Label("KVcache_Bucket"),
+        html.Label("KVcache Bucket"),
         dcc.Slider(id='kvcache-bucket-slider', min=kv_bucket_min,
-                   max=kv_bucket_max, step=kv_bucket_step, value=128),
+                   max=kv_bucket_max, step=kv_bucket_step, value=256),
+        html.Br(),
 
-        html.Button('Run Analysis', id='run-analysis-button'),
-    ], style={'width': '20%', 'display': 'inline-block', 'verticalAlign': 'top', 'padding': 20}),
+        html.Label("Enable Vec BMM"),
+        dcc.Dropdown(id='enable-vec-bmm-dropdown', options=[{'label': 'True', 'value': True}, {
+            'label': 'False', 'value': False}], value=False),
+        html.Br(),
+
+        html.Button('Run Analysis', id='run-analysis-button',
+                    style={'width': '100%', 'height': '50px', 'background-color': 'darkblue', 'color': 'white'}),
+    ], style={'width': '15%', 'float': 'left', 'padding': '20px', 'position': 'fixed'}),
+
+    html.Div([
+        dcc.Tabs([
+            dcc.Tab(label='Graph View', children=[
+                html.Div([
+                    dcc.Graph(id='overall-projection-graph'),
+                    dcc.Graph(id='layer-projection-graph')
+                ], style={'width': '100%', 'padding': '20px'}),
+            ]),
+
+            dcc.Tab(label='Table View', children=[
+                html.Div([
+                    html.Label("Overall Projection Table", style={
+                               'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
+                    html.Div(id='overall-projection-table'),
+                    html.Br(),
+
+                    html.Label("Layer Projection Table (Prefill)", style={
+                               'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
+                    html.Div(id='layer-projection-table-prefill'),
+                    html.Br(),
+
+                    html.Label("Layer Projection Table (Decode)", style={
+                               'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
+                    html.Div(id='layer-projection-table-decode')
+                ], style={'width': '100%', 'padding': '20px'}),
+            ]),
+        ]),
+    ], style={'margin-left': '18%', 'margin-right': '2%', 'padding': '20px'}),
 
     dcc.Interval(id='interval-component', interval=1 *
                  1000, n_intervals=0, max_intervals=1)
@@ -134,7 +171,7 @@ def plot_overall_projection(device, type_, model, dtype, kvcache_bucket, overall
             side='right'
         ),
         title=f"{device}{type_}_{model}_{dtype}_overall_projection",
-        height=height,
+        # height=height,
         margin=dict(r=300)
     )
 
@@ -219,7 +256,7 @@ def plot_layer_projection(device, type_, model, dtype, layer_projection):
         xaxis=dict(type='log', title='Arithmetic Intensity (FLOP:Byte)'),
         yaxis=dict(type='log', title='Performance (TFLOPs/sec)'),
         title=f"{device}{type_}_{model}_{dtype}_layer_projection",
-        height=height
+        # height=height
     )
 
     marker_shapes = {
@@ -282,24 +319,79 @@ def plot_layer_projection(device, type_, model, dtype, layer_projection):
     return fig_layer
 
 
+def create_projection_table(overall_projection_table):
+    cols = [{"name": col, "id": col} for col in overall_projection_table[0]]
+    rows = [dict(zip(overall_projection_table[0], row))
+            for row in overall_projection_table[1:]]
+
+    table_overall = dash.dash_table.DataTable(
+        columns=cols,
+        data=rows,
+        style_table={'overflowX': 'auto'},
+        style_cell={
+            'height': 'auto',
+            'minWidth': '0px', 'maxWidth': '140px',
+            'whiteSpace': 'normal',
+            'textAlign': 'center'
+        },
+        style_header={
+            'backgroundColor': 'rgb(24, 114, 182)',
+            'color': 'white',
+            'fontWeight': 'bold'
+        },
+        style_data_conditional=[
+            {
+                'if': {'row_index': 'odd'},
+                'backgroundColor': 'rgb(232, 244, 253)'
+            },
+            {
+                'if': {'row_index': 'even'},
+                'backgroundColor': 'rgb(255, 255, 255)'
+            },
+            {
+                'if': {'state': 'selected'},
+                'backgroundColor': 'rgb(173, 216, 230)',
+                'border': '1px solid rgb(24, 114, 182)'
+            }
+        ],
+        sort_action='native',
+        filter_action='native',
+        page_action='native',
+        page_current=0,
+        page_size=7
+    )
+
+    return table_overall
+
+
 @app.callback(
-    [Output('overall-projection-graph', 'figure'),
-     Output('layer-projection-graph', 'figure'),
-     Output('overall-projection-table', 'children')],
-    [Input('run-analysis-button', 'n_clicks'),
-     Input('interval-component', 'n_intervals')],
-    [State('device-dropdown', 'value'),
-     State('type-dropdown', 'value'),
-     State('dtype-dropdown', 'value'),
-     State('model-dropdown', 'value'),
-     State('input-length-slider', 'value'),
-     State('output-length-slider', 'value'),
-     State('batch-size-dropdown', 'value')],
-    [State('kvcache-bucket-slider', 'value')]
+    [
+        Output('overall-projection-graph', 'figure'),
+        Output('layer-projection-graph', 'figure'),
+        Output('overall-projection-table', 'children'),
+        Output('layer-projection-table-prefill', 'children'),
+        Output('layer-projection-table-decode', 'children')
+    ],
+    [
+        Input('run-analysis-button', 'n_clicks'),
+        Input('interval-component', 'n_intervals')
+    ],
+    [
+        State('device-dropdown', 'value'),
+        State('type-dropdown', 'value'),
+        State('dtype-dropdown', 'value'),
+        State('model-dropdown', 'value'),
+        State('input-length-slider', 'value'),
+        State('output-length-slider', 'value'),
+        State('batch-size-dropdown', 'value'),
+        State('kvcache-bucket-slider', 'value'),
+        State('enable-vec-bmm-dropdown', 'value')
+    ]
 )
-def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_length, output_length, batch_sizes, kvcache_bucket):
+def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_length, output_length, batch_sizes, kvcache_bucket, enable_vec_bmm):
+    default_return = dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     if not n_clicks and n_intervals == 0:
-        return dash.no_update, dash.no_update, dash.no_update
+        return default_return
 
     proj_cfg = {
         "device_list": [device],
@@ -317,7 +409,7 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
         "bs_list": batch_sizes,
         "optims": {
             "kvcache_bucket": kvcache_bucket,
-            "enable_vec_bmm": True,
+            "enable_vec_bmm": enable_vec_bmm,
         }
     }
 
@@ -325,21 +417,21 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
     proj_dict = analyzer.analyze(True)[model]
     overall_projection, overall_projection_table = helper.extract_overall_projection(
         proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
-    layer_projection = helper.extract_layer_projection(
+    layer_projection, layer_analysis_dict = helper.extract_layer_projection(
         proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
 
     fig_overall = plot_overall_projection(
         device, type_, model, dtype, kvcache_bucket, overall_projection)
+
     fig_layer = plot_layer_projection(
         device, type_, model, dtype, layer_projection)
 
-    # table_overall = dash.dash_table.DataTable(
-    #     columns=[{"name": i, "id": i} for i in overall_projection_table.columns],
-    #     data=overall_projection_table.to_dict('records')
-    # )
-    table_overall = None
+    table_overall = create_projection_table(overall_projection_table)
+    table_layer_prefill = create_projection_table(
+        layer_analysis_dict["prefill"])
+    table_layer_decode = create_projection_table(layer_analysis_dict["decode"])
 
-    return fig_overall, fig_layer, table_overall
+    return fig_overall, fig_layer, table_overall, table_layer_prefill, table_layer_decode
 
 
 if __name__ == '__main__':
