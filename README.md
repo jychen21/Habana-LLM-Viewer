@@ -1,11 +1,32 @@
 ## Habana-Viewer
 Habana-Viewer is a tool that provides Roofline model, LLM performance prediction and memory analysis for Intel Gaudi platform. This tool can be used to estimate the approximate performance of models such as Llama2-13B, Qwen-7B, Mixtral-8x7B on Intel Gaudi platform.
 
-![Llama2-13B Overall Projection](./data/example_overall_projection.png)
+![dashboard graph](./data/example_dashboard_graph.png)
 
-![Llama2-13B Layer Projection](./data/example_layer_projection.png)
+![dashboard table](./data/example_dashboard_table.png)
 
-### Model Projection
+## Model Projection
+### Command
+1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost (Currently not fully enabled).
+    ```sh
+    python habana_viewer.py
+    ```
+2. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
+    ```sh
+    python run_model_projection.py \
+    --device IntelGaudi2 \
+    --device-type B \
+    --model Llama2-7B \
+    --data-type BF16 \
+    --batch-size BATCH_SIZE \
+    --context-input CONTEXT_INPUT \
+    --context-output CONTEXT_OUTPUT \
+    --kvcache-bucket 256 \
+    --vec-bmm
+    ```
+<!-- 3. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
+
+### Example
 |Model Name|Projected Data|
 |:------:|:------:|
 |Llama2-7B|[Link](./data/model/Llama2-7B/)|
@@ -15,14 +36,7 @@ Habana-Viewer is a tool that provides Roofline model, LLM performance prediction
 |Qwen-14B|[Link](./data/model/Qwen-14B/)|
 |Mixtral-8x7B|[Link](./data/model/Mixtral-8x7B/)|
 
-### Op Projection
-|Op Name|Projected Data|
-|:------:|:------:|
-|Matmul|[Link](./data/operation/Matmul/)|
-
-### Example
-#### Model Projection
-##### Llama3-8B
+<!-- ##### Llama3-8B
 - Overall Projection (
     [Details](./data/model/Llama3-8B/IntelGaudi2C_overall_projection.csv)
 ) /
@@ -36,7 +50,7 @@ FFN (
     [Prefill](./data/model/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) /
     [Decode](./data/model/Llama3-8B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 )
-<!-- ![Llama3-8B Overall Projection](./data/model/Llama3-8B/IntelGaudi2B_pp1_tp1_overall_projection.png) -->
+![Llama3-8B Overall Projection](./data/model/Llama3-8B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 ##### Llama2-13B
 - Overall Projection (
@@ -52,7 +66,7 @@ FFN (
     [Prefill](./data/model/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) /
     [Decode](./data/model/Llama2-13B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 )
-<!-- ![Llama2-13B Overall Projection](./data/model/Llama2-13B/IntelGaudi2B_pp1_tp1_overall_projection.png) -->
+![Llama2-13B Overall Projection](./data/model/Llama2-13B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 ##### Qwen-7B
 - Overall Projection (
@@ -68,7 +82,7 @@ FFN(
     [Prefill](./data/model/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) /
     [Decode](./data/model/Qwen-7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 )
-<!-- ![Qwen-7B Overall Projection](./data/model/Qwen-7B/IntelGaudi2B_pp1_tp1_overall_projection.png) -->
+![Qwen-7B Overall Projection](./data/model/Qwen-7B/IntelGaudi2B_pp1_tp1_overall_projection.png)
 
 ##### Mixtral-8x7B
 - Overall Projection (
@@ -84,27 +98,26 @@ FFN (
     [Prefill](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_prefill_ffn_up_projection.csv) /
     [Decode](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_BF16_decode_ffn_up_projection.csv)
 )
-<!-- ![Mixtral-8x7B Overall Projection](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_overall_projection.png) -->
+![Mixtral-8x7B Overall Projection](./data/model/Mixtral-8x7B/IntelGaudi2B_pp1_tp1_overall_projection.png) -->
 
-<!-- #### Operation Projection -->
-
+## Operation Projection
 ### Command
-#### Model Projection
-1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost (Currently not fully enabled).
-    ```sh
-    python habana_viewer.py
-    ```
-2. Simpily run with **[run_model_projection.py](./run_model_projection.py)** and the results will be saved to folder "data/model", one can modify **proj_cfg** in main.
-    ```sh
-    python run_model_projection.py
-    ```
-<!-- 3. Run with jupyter notebook: **run_projection.ipynb** for simpily visualization. -->
-#### Operation Projection
 1. Simpily run with **[run_op_projection.py](./run_op_projection.py)** and the results will be saved to folder "data/operation", same with model projection, one can modify **proj_cfg** in main.
     ```sh
-    python run_op_projection.py
+    python run_op_projection.py \
+    --device IntelGaudi2 \
+    --device-type B \
+    --op Matmul \
+    --data-type BF16 \
+    --m-list m1 m2 ... \
+    --n-list n1 n2 ... \
+    --k-list k1 k2 ...
     ```
 
+### Example
+|Op Name|Projected Data|
+|:------:|:------:|
+|Matmul|[Link](./data/operation/Matmul/)|
 
 ### Todo
 1. Currently only cover single card perf projection, will support multi-card / multi-node.
