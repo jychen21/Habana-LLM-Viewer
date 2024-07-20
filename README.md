@@ -1,5 +1,5 @@
 ## Habana-LLM-Viewer
-Habana-LLM-Viewer is a tool that provides Roofline model, LLM performance prediction and memory analysis for Intel Gaudi platform. Inspired by [LLM-Viewer](https://github.com/hahnyuan/LLM-Viewer), this tool can be used to estimate performance of models such as Llama2-13B, Qwen-7B, Mixtral-8x7B on Intel Gaudi platform.
+Habana-LLM-Viewer is a tool that provides Roofline model, LLM performance prediction and memory analysis for Intel Gaudi platform. Inspired by [LLM-Viewer](https://github.com/hahnyuan/LLM-Viewer), Habana-LLM-Viewer can be used to estimate performance of models such as Llama2-13B, Qwen-7B, Mixtral-8x7B on Intel Gaudi platform.
 
 ![dashboard graph](./data/example_dashboard_graph.png)
 
