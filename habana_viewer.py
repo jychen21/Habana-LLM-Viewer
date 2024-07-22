@@ -20,8 +20,8 @@ dtypes = list(config.DType2Bytes.keys())
 
 
 models = list(config.ModelDict.keys())
-in_min, in_max, in_step = 128, 4096, 512
-out_min, out_max, out_step = 512, 8192, 512
+in_min, in_max, in_step = 128, 4096, 128
+out_min, out_max, out_step = 128, 8192, 128
 kv_bucket_min, kv_bucket_max, kv_bucket_step = 128, 1024, 128
 batch_sizes = [2 ** i for i in range(10)]  # + [14, 15, 56, 255, 257]
 batch_sizes = sorted(batch_sizes)
@@ -107,6 +107,14 @@ app.layout = html.Div([
                     html.Label("Layer Projection Table (Decode)", style={
                                'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
                     html.Div(id='layer-projection-table-decode')
+                ], style={'width': '100%', 'padding': '20px'}),
+            ]),
+
+            dcc.Tab(label='Memory View', children=[
+                html.Div([
+                    html.Label("Memory Projection Table", style={
+                               'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
+                    html.Div(id='memory-projection-table'),
                 ], style={'width': '100%', 'padding': '20px'}),
             ]),
         ]),
@@ -370,7 +378,8 @@ def create_projection_table(overall_projection_table):
         Output('layer-projection-graph', 'figure'),
         Output('overall-projection-table', 'children'),
         Output('layer-projection-table-prefill', 'children'),
-        Output('layer-projection-table-decode', 'children')
+        Output('layer-projection-table-decode', 'children'),
+        Output('memory-projection-table', 'children')
     ],
     [
         Input('run-analysis-button', 'n_clicks'),
@@ -389,7 +398,7 @@ def create_projection_table(overall_projection_table):
     ]
 )
 def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_length, output_length, batch_sizes, kvcache_bucket, enable_vec_bmm):
-    default_return = dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+    default_return = dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     if not n_clicks and n_intervals == 0:
         return default_return
 
@@ -415,6 +424,8 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
 
     analyzer = Analyzer(proj_cfg)
     proj_dict = analyzer.analyze(True)[model]
+    memory_projection_table = helper.extract_memory_projection(
+        proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
     overall_projection, overall_projection_table = helper.extract_overall_projection(
         proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
     layer_projection, layer_analysis_dict = helper.extract_layer_projection(
@@ -431,7 +442,9 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
         layer_analysis_dict["prefill"])
     table_layer_decode = create_projection_table(layer_analysis_dict["decode"])
 
-    return fig_overall, fig_layer, table_overall, table_layer_prefill, table_layer_decode
+    table_memory = create_projection_table(memory_projection_table)
+
+    return fig_overall, fig_layer, table_overall, table_layer_prefill, table_layer_decode, table_memory
 
 
 if __name__ == '__main__':

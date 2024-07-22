@@ -157,6 +157,30 @@ def plot_overall_projection(model_name, device, type, pp, tp, figure_name, proj_
     plt.clf()
 
 
+def extract_memory_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
+    proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS", "Weights(GB)", "KVCache(GB)", "Activation(GB)", "Total(GB)"]
+
+    device_proj = proj_dict[device]
+    type_proj = device_proj[type_]
+    pp_proj = type_proj[pp]
+    tp_proj = pp_proj[tp]
+    dtype_proj = tp_proj[dtype]
+    input_proj = dtype_proj[input_length]
+    output_proj = input_proj[output_length]
+    memory_projection_table = [proj_item]
+
+    for bs, proj_rst in output_proj:
+        memory = proj_rst["memory"]
+        weights = round(memory['weights']['memory'] / GigaBytes, 2)
+        kvcache = round(memory['kvcache']['memory'] / GigaBytes, 2)
+        activat = round(memory['activat']['memory'] / GigaBytes, 2)
+        total = round(weights + kvcache + activat, 2)
+        memory_projection_table.append([f"{device}{type_}", pp, tp, dtype, input_length, output_length,
+                                         bs, weights, kvcache, activat, total])
+
+    return memory_projection_table
+
+
 def extract_overall_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
     proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS", "KVCache Bucket", "Prefill(ms)",
                  "Decode Min(ms)", "Decode Max(ms)", "Decode Avg(ms)", "Latency Avg(ms)", "Throughput(tokens/sec)"]
