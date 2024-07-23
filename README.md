@@ -5,6 +5,8 @@ Habana-LLM-Viewer is a tool that provides Roofline model, LLM performance predic
 
 ![dashboard table](./data/example_dashboard_table.png)
 
+![dashboard memory](./data/example_dashboard_memory.png)
+
 ## Model Projection
 ### Command
 1. Simpily run with **[habana_viewer.py](./habana_viewer.py)** and the results will show up on localhost.
