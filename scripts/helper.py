@@ -157,8 +157,17 @@ def plot_overall_projection(model_name, device, type, pp, tp, figure_name, proj_
     plt.clf()
 
 
-def extract_memory_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
-    proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS", "Weights(GB)", "KVCache(GB)", "Activation(GB)", "Total(GB)"]
+def extract_memory_projection(proj_dict, model_name, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
+    proj_item = ["Device", "PP", "TP", "DType", "Input", "Output", "BS",
+                 "Weights (GB)", "KVCache (GB)", "Activation (GB)", "Total (GB)"]
+    weights_detail = ["Q_Proj (MB)", "K_Proj (MB)", "V_Proj (MB)",
+                      "O_Proj (MB)", "Up_Proj (MB)", "Down_Proj (MB)", "Gate_Proj (MB)"]
+
+    model = ModelDict[model_name]
+    mlp_with_gate = model["mlp_with_gate"]
+    num_layers_mlp = model["num_layers_mlp"]
+    num_layers_moe = model["num_layers_moe"]
+    num_experts = model["num_experts"]
 
     device_proj = proj_dict[device]
     type_proj = device_proj[type_]
@@ -168,6 +177,7 @@ def extract_memory_projection(proj_dict, device, type_, pp, tp, dtype, input_len
     input_proj = dtype_proj[input_length]
     output_proj = input_proj[output_length]
     memory_projection_table = [proj_item]
+    memory_in_detail = [weights_detail]
 
     for bs, proj_rst in output_proj:
         memory = proj_rst["memory"]
@@ -176,9 +186,25 @@ def extract_memory_projection(proj_dict, device, type_, pp, tp, dtype, input_len
         activat = round(memory['activat']['memory'] / GigaBytes, 2)
         total = round(weights + kvcache + activat, 2)
         memory_projection_table.append([f"{device}{type_}", pp, tp, dtype, input_length, output_length,
-                                         bs, weights, kvcache, activat, total])
+                                        bs, weights, kvcache, activat, total])
 
-    return memory_projection_table
+    weights = output_proj[0][1]['memory']['weights']
+    single_layer = weights['items']['single_layer_mlp']
+    if single_layer is None:
+        single_layer = weights['items']['single_layer_moe']
+    q_proj = k_proj = v_proj = o_proj = round(
+        single_layer['items']['qkvo']['memory'] / 4 / MegaBytes, 2)
+    up = round(single_layer['items']['ffn']['items']
+               ['up']['memory'] * num_experts / MegaBytes, 2)
+    down = round(single_layer['items']['ffn']['items']
+                 ['down']['memory'] * num_experts / MegaBytes, 2)
+    gate = 0
+    if mlp_with_gate:
+        gate = round(single_layer['items']['ffn']['items']
+                     ['gate']['memory'] * num_experts / MegaBytes, 2)
+    memory_in_detail.append([q_proj, k_proj, v_proj, o_proj, up, down, gate])
+
+    return memory_projection_table, memory_in_detail
 
 
 def extract_overall_projection(proj_dict, device, type_, pp, tp, dtype, input_length, output_length, kvcache_bucket, batch_sizes):
@@ -325,9 +351,9 @@ def extract_layer_projection(proj_dict, device, type_, pp, tp, dtype, input_leng
                     op["math_ai"], 2)
                 bound = op["bound"]
                 layer_analysis["prefill"].append([f"{device}{type_}",
-                                                    pp, tp, dtype, bs, input_length, output_length,
-                                                    name, tq, tkv, num_ops, size, tops,
-                                                    math_ai, bound])
+                                                  pp, tp, dtype, bs, input_length, output_length,
+                                                  name, tq, tkv, num_ops, size, tops,
+                                                  math_ai, bound])
             elif isinstance(module, tuple):
                 for op in module:
                     if op is not None:
@@ -342,9 +368,9 @@ def extract_layer_projection(proj_dict, device, type_, pp, tp, dtype, input_leng
                             op["math_ai"], 2)
                         bound = op["bound"]
                         layer_analysis["prefill"].append([f"{device}{type_}",
-                                                            pp, tp, dtype, bs, input_length, output_length,
-                                                            name, tq, tkv, num_ops, size, tops,
-                                                            math_ai, bound])
+                                                          pp, tp, dtype, bs, input_length, output_length,
+                                                          name, tq, tkv, num_ops, size, tops,
+                                                          math_ai, bound])
 
         # decoding
         _, last_step = list(

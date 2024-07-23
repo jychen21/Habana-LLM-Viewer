@@ -88,6 +88,7 @@ app.layout = html.Div([
             dcc.Tab(label='Graph View', children=[
                 html.Div([
                     dcc.Graph(id='overall-projection-graph'),
+
                     dcc.Graph(id='layer-projection-graph')
                 ], style={'width': '100%', 'padding': '20px'}),
             ]),
@@ -112,6 +113,18 @@ app.layout = html.Div([
 
             dcc.Tab(label='Memory View', children=[
                 html.Div([
+                    html.Div([
+                        html.Label("Memory Projection for Batch Size"),
+                        dcc.Dropdown(id='memory-batch-size-dropdown', options=[
+                            {'label': i, 'value': i} for i in batch_sizes], multi=False, value=batch_sizes[len(batch_sizes)//2]),
+                        html.Br(),
+
+                        dcc.Graph(id='memory-projection-pie-chart',
+                                  style={'display': 'inline-block', 'width': '48%'}),
+                        dcc.Graph(id='weights-in-detail-pie-chart',
+                                  style={'display': 'inline-block', 'width': '48%'}),
+                    ]),
+
                     html.Label("Memory Projection Table", style={
                                'textAlign': 'center', 'fontSize': 24, 'fontWeight': 'bold'}),
                     html.Div(id='memory-projection-table'),
@@ -372,6 +385,28 @@ def create_projection_table(overall_projection_table):
     return table_overall
 
 
+def create_memory_projection_pie_chart(memory_projection_table, batch_size):
+    memory_projection_data = {}
+    for data in memory_projection_table[1:]:
+        memory_projection_data[data[-5]] = data[-4:-1]
+    values = memory_projection_data.get(batch_size, [0, 0])
+    # ['Weights', 'KVCache', 'Activattion']
+    labels = memory_projection_table[0][-4:-1]
+
+    # title=f'Memory Projection for Batch Size {batch_size}')
+    fig = px.pie(values=values, names=labels)
+
+    return fig
+
+
+def create_weights_in_detail_pie_chart(weights_in_detail):
+    labels = weights_in_detail[0]
+    # title=f'Memory Projection for Batch Size {batch_size}')
+    fig = px.pie(values=weights_in_detail[1], names=labels)
+
+    return fig
+
+
 @app.callback(
     [
         Output('overall-projection-graph', 'figure'),
@@ -379,6 +414,8 @@ def create_projection_table(overall_projection_table):
         Output('overall-projection-table', 'children'),
         Output('layer-projection-table-prefill', 'children'),
         Output('layer-projection-table-decode', 'children'),
+        Output('memory-projection-pie-chart', 'figure'),
+        Output('weights-in-detail-pie-chart', 'figure'),
         Output('memory-projection-table', 'children')
     ],
     [
@@ -394,11 +431,12 @@ def create_projection_table(overall_projection_table):
         State('output-length-slider', 'value'),
         State('batch-size-dropdown', 'value'),
         State('kvcache-bucket-slider', 'value'),
-        State('enable-vec-bmm-dropdown', 'value')
+        State('enable-vec-bmm-dropdown', 'value'),
+        Input('memory-batch-size-dropdown', 'value')
     ]
 )
-def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_length, output_length, batch_sizes, kvcache_bucket, enable_vec_bmm):
-    default_return = dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
+def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_length, output_length, batch_sizes, kvcache_bucket, enable_vec_bmm, memory_bs):
+    default_return = dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update, dash.no_update
     if not n_clicks and n_intervals == 0:
         return default_return
 
@@ -424,8 +462,8 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
 
     analyzer = Analyzer(proj_cfg)
     proj_dict = analyzer.analyze(True)[model]
-    memory_projection_table = helper.extract_memory_projection(
-        proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
+    memory_projection_table, weights_in_detail = helper.extract_memory_projection(
+        proj_dict, model, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
     overall_projection, overall_projection_table = helper.extract_overall_projection(
         proj_dict, device, type_, 1, 1, dtype, input_length, output_length, kvcache_bucket, batch_sizes)
     layer_projection, layer_analysis_dict = helper.extract_layer_projection(
@@ -442,9 +480,13 @@ def update_output(n_clicks, n_intervals, device, type_, dtype, model, input_leng
         layer_analysis_dict["prefill"])
     table_layer_decode = create_projection_table(layer_analysis_dict["decode"])
 
+    memory_pie_chart = create_memory_projection_pie_chart(
+        memory_projection_table, memory_bs)
+    weights_detail_pie_chart = create_weights_in_detail_pie_chart(
+        weights_in_detail)
     table_memory = create_projection_table(memory_projection_table)
 
-    return fig_overall, fig_layer, table_overall, table_layer_prefill, table_layer_decode, table_memory
+    return fig_overall, fig_layer, table_overall, table_layer_prefill, table_layer_decode, memory_pie_chart, weights_detail_pie_chart, table_memory
 
 
 if __name__ == '__main__':
