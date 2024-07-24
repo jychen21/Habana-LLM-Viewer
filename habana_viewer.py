@@ -55,13 +55,33 @@ app.layout = html.Div([
         html.Br(),
 
         html.Label("Input Length"),
-        dcc.Slider(id='input-length-slider', min=in_min,
-                   max=in_max, step=in_step, value=in_min),
+        dcc.Slider(
+            id='input-length-slider',
+            min=in_min,
+            max=in_max,
+            step=in_step,
+            value=in_min,
+            marks={
+                in_min: {'label': str(in_min)},
+                in_max: {'label': str(in_max)}
+            },
+            tooltip={"placement": "bottom", "always_visible": False}
+        ),
         html.Br(),
 
         html.Label("Output Length"),
-        dcc.Slider(id='output-length-slider', min=out_min,
-                   max=out_max, step=out_step, value=out_max / 2),
+        dcc.Slider(
+            id='output-length-slider',
+            min=out_min,
+            max=out_max,
+            step=out_step,
+            value=out_max / 2,
+            marks={
+                out_min: {'label': str(out_min)},
+                out_max: {'label': str(out_max)}
+            },
+            tooltip={"placement": "bottom", "always_visible": False}
+        ),
         html.Br(),
 
         html.Label("Batch Size"),
